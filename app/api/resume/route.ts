@@ -26,8 +26,15 @@ export const dynamic = 'force-dynamic';
 /** Overridable so a model rename doesn't require a code change at the booth. */
 const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
 
-/** Gemini reads these natively. DOCX is NOT on the list — export to PDF. */
+/**
+ * Gemini reads all of these natively. DOCX is NOT on the list — export to PDF.
+ *
+ * Images matter more than they look: at a booth the most likely input isn't a
+ * PDF file at all, it's someone photographing their résumé with their phone.
+ * HEIC is included because that's what iPhones produce by default.
+ */
 const ACCEPTED_MIME: Record<string, string> = {
+  // documents
   'application/pdf': 'application/pdf',
   'text/plain': 'text/plain',
   'text/markdown': 'text/plain',
@@ -35,6 +42,13 @@ const ACCEPTED_MIME: Record<string, string> = {
   'text/csv': 'text/plain',
   'text/rtf': 'text/rtf',
   'application/rtf': 'text/rtf',
+  // photos and screenshots
+  'image/png': 'image/png',
+  'image/jpeg': 'image/jpeg',
+  'image/jpg': 'image/jpeg',
+  'image/webp': 'image/webp',
+  'image/heic': 'image/heic',
+  'image/heif': 'image/heif',
 };
 
 /** Résumés are small. This is a guard against someone uploading a film. */
@@ -181,7 +195,7 @@ export async function POST(req: Request) {
   // instruction; text and empty seeds are plain text.
   const INSTRUCTION =
     seed.kind === 'file'
-      ? 'The attached document is my résumé. Generate one candidate card from it.'
+      ? 'The attached file is my résumé (it may be a photo or scan). Read it and generate one candidate card from it.'
       : seed.kind === 'text'
         ? `Seed: ${seed.text}\nGenerate one candidate card.`
         : 'Seed: (empty)\nGenerate one candidate card.';

@@ -20,8 +20,13 @@ export interface ResumeCard {
 }
 
 /** What the file picker should offer. DOCX is deliberately absent — Gemini
- *  cannot read it natively, so we ask for a PDF export instead. */
-export const ACCEPTED_UPLOAD = '.pdf,.txt,.md,.csv,.rtf';
+ *  cannot read it natively, so we ask for a PDF export instead.
+ *
+ *  `image/*` is first on purpose: on a phone this makes the OS offer the
+ *  camera and photo library, which is how most people will actually get their
+ *  résumé into a booth kiosk. */
+export const ACCEPTED_UPLOAD =
+  'image/*,.pdf,.png,.jpg,.jpeg,.webp,.heic,.txt,.md,.csv,.rtf';
 
 /** Wordlist fallback, shaped like a model card. */
 function localCard(rejected?: ResumeCard['rejected']): ResumeCard {
