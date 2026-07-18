@@ -142,18 +142,38 @@ type Seed =
   | { kind: 'text'; text: string }
   | { kind: 'file'; mimeType: string; base64: string; filename: string };
 
+/**
+ * `crank` rides along with the seed because a Request body can only be read
+ * once — parsing it twice throws, so both come out of the same pass.
+ *
+ * NOTE ON FAIRNESS: crank is offered to every author regardless of whether
+ * they picked REAL or LARP, deliberately. If only LARP-listers could crank,
+ * the register of the card would become evidence of `is_real` and the room
+ * could read the answer off the prose instead of betting on it — the same leak
+ * the column grant on markets.is_real exists to prevent. The SYSTEM rule about
+ * holding one confident register still applies: crank raises the ceiling for
+ * everyone, it does not mark a card as fake.
+ */
+interface ParsedRequest {
+  seed: Seed;
+  crank: boolean;
+}
+
 /** Reads the seed out of either a multipart upload or a JSON body. */
-async function readSeed(req: Request): Promise<Seed | { error: string; status: number }> {
+async function readSeed(
+  req: Request,
+): Promise<ParsedRequest | { error: string; status: number }> {
   const contentType = req.headers.get('content-type') ?? '';
 
   if (contentType.includes('multipart/form-data')) {
     const form = await req.formData();
+    const crank = String(form.get('crank') ?? '') === 'true';
     const file = form.get('file');
     if (!(file instanceof File)) {
       const text = String(form.get('seed') ?? '').slice(0, 4000);
-      return text ? { kind: 'text', text } : { kind: 'none' };
+      return { seed: text ? { kind: 'text', text } : { kind: 'none' }, crank };
     }
-    if (file.size === 0) return { kind: 'none' };
+    if (file.size === 0) return { seed: { kind: 'none' }, crank };
     if (file.size > MAX_UPLOAD_BYTES) {
       return { error: 'file_too_large', status: 413 };
     }
@@ -164,18 +184,27 @@ async function readSeed(req: Request): Promise<Seed | { error: string; status: n
       return { error: 'unsupported_file_type', status: 415 };
     }
     const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
-    return { kind: 'file', mimeType, base64, filename: file.name };
+    return { seed: { kind: 'file', mimeType, base64, filename: file.name }, crank };
   }
 
   try {
     const body = await req.json();
     const text = typeof body?.seed === 'string' ? body.seed.slice(0, 4000) : '';
-    return text ? { kind: 'text', text } : { kind: 'none' };
+    const crank = body?.crank === true;
+    return { seed: text ? { kind: 'text', text } : { kind: 'none' }, crank };
   } catch {
     // no body is a valid request — the seed is optional
-    return { kind: 'none' };
+    return { seed: { kind: 'none' }, crank: false };
   }
 }
+
+/** Appended to the user turn when the author asks for another notch. */
+const CRANK_INSTRUCTION = `
+This card is already on the author's screen and they pressed "crank it up".
+Escalate it: a grander title, bolder verbs, a larger asking figure than the
+seed suggests. Keep every rule above — still exactly 3 bullets, still under 12
+words each, still no real names, still PG-13, and still the same confident
+register. Escalate the CLAIMS, never the tell.`;
 
 export async function POST(req: Request) {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
@@ -186,19 +215,22 @@ export async function POST(req: Request) {
     );
   }
 
-  const seed = await readSeed(req);
-  if ('error' in seed) {
-    return NextResponse.json({ error: seed.error }, { status: seed.status });
+  const parsed = await readSeed(req);
+  if ('error' in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
+  const { seed, crank } = parsed;
 
   // Build the user turn. A file becomes an inlineData part alongside the
   // instruction; text and empty seeds are plain text.
-  const INSTRUCTION =
+  const BASE_INSTRUCTION =
     seed.kind === 'file'
       ? 'The attached file is my résumé (it may be a photo or scan). Read it and generate one candidate card from it.'
       : seed.kind === 'text'
         ? `Seed: ${seed.text}\nGenerate one candidate card.`
         : 'Seed: (empty)\nGenerate one candidate card.';
+
+  const INSTRUCTION = crank ? `${BASE_INSTRUCTION}\n${CRANK_INSTRUCTION}` : BASE_INSTRUCTION;
 
   const parts =
     seed.kind === 'file'

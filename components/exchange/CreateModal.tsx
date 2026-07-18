@@ -128,6 +128,36 @@ export function CreateModal({
     }
   }, [applyCard]);
 
+  /**
+   * Crank: escalate what is already on screen rather than rolling fresh.
+   *
+   * Seeded from the current form, so it builds on the author's own words —
+   * including anything they typed by hand or got back from an upload.
+   *
+   * Offered whatever the settlement truth is set to, on purpose. Gating it
+   * behind LARP would turn the card's register into a tell for `is_real`, and
+   * the room is supposed to price that, not read it. See the note in
+   * app/api/resume/route.ts.
+   */
+  const crankItUp = useCallback(async () => {
+    const current = [
+      title.trim(),
+      ...bullets.map((b) => b.trim()).filter(Boolean),
+      askingTc ? `asking ${askingTc}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    setRolling(true);
+    try {
+      // Nothing typed yet means there is nothing to escalate — fall through to
+      // an invented card so the button never simply does nothing.
+      applyCard(await generateResumeCard(current || undefined, { crank: true }));
+    } finally {
+      setRolling(false);
+    }
+  }, [title, bullets, askingTc, applyCard]);
+
   /** Upload path: parody the author's actual résumé rather than inventing one. */
   const rollFromFile = useCallback(
     async (file: File) => {
@@ -330,6 +360,15 @@ export function CreateModal({
                   }}
                 />
               </label>
+              <button
+                type="button"
+                className="randomize-button crank-button"
+                onClick={() => void crankItUp()}
+                disabled={busy}
+                title="Escalate what's on screen — available whatever the truth is set to"
+              >
+                ⇗ CRANK IT UP
+              </button>
               <button type="submit" className="open-market-button" disabled={busy}>
                 {submitting ? 'OPENING…' : 'OPEN MARKET · 15:00'}
               </button>

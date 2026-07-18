@@ -26,7 +26,8 @@ players(id uuid pk, handle text, cash int, ref_code text unique,
         is_bot bool, created_at timestamptz)
 markets(id uuid pk, title text, bullets text[], asking_tc int, is_real bool,
         prob_yes_bps int, expires_at timestamptz, status text,
-        author_id uuid, created_at timestamptz)
+        author_id uuid, created_at timestamptz,
+        ticker text, tagline text)
 positions(player_id uuid, market_id uuid, yes int, no int,
           pk(player_id, market_id))
 trades(id bigint pk, player_id uuid, market_id uuid, side text, action text,
@@ -226,6 +227,15 @@ The realtime payload carries the `markets` row **without `is_real`** (column
 grant). When a row flips to `status='resolved'`, the provider refetches
 `markets_public` to pick up the revealed `is_real`. Never infer the answer from
 the price.
+
+### `ticker` / `tagline` are cosmetic and nullable
+
+Both are written by `create_market` (`p_ticker`, `p_tagline`) and exposed on
+`markets_public`, so `MarketPublic` carries them. Both are nullable and must be
+treated as such: a hand-typed listing has neither, and a bot-seeded market
+carries a ticker but no tagline. They are decoration for the résumé sheet and
+the card preview — **nothing may infer `is_real` from whether they are set**,
+or the résumé desk becomes a tell for the answer the room is pricing.
 
 ### `lib/db.types.ts` is knowingly stale
 

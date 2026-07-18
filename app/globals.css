@@ -376,6 +376,86 @@ textarea:focus-visible {
   background: #c7ff5a;
 }
 
+/* The growth loop's front door. Gold rather than YES-green so it reads as
+   money and doesn't compete with LIST YOURSELF for the primary action. */
+.invite-button {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--warning);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+  padding: 0 13px;
+  font: 700 10px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.invite-button:hover {
+  background: color-mix(in srgb, var(--warning) 24%, transparent);
+}
+
+.invite-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.invite-modal__body {
+  padding: 18px;
+}
+
+.invite-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.invite-split > div {
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+}
+
+.invite-split span {
+  color: var(--muted);
+  font: 8px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .12em;
+}
+
+.invite-split strong {
+  margin-top: 9px;
+  color: var(--warning);
+  font: 700 38px/1 var(--font-geist-mono), monospace;
+  letter-spacing: -.03em;
+}
+
+.invite-modal__code {
+  width: min(156px, 55%);
+  margin: 18px auto 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+/* This .referral-box is already inside the body's 18px gutter. */
+.invite-modal__body .referral-box {
+  margin: 18px 0 0;
+}
+
+/* The share sheet is the action worth taking on a phone; copy is the fallback.
+   Scoped through .referral-box to outrank the outlined default it sits in. */
+.referral-box button.invite-primary {
+  border-color: var(--yes);
+  background: var(--yes);
+  color: #101600;
+}
+
 .live-tape {
   height: 36px;
   display: grid;
@@ -1611,12 +1691,20 @@ textarea:focus-visible {
 
 .form-actions {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 18px;
 }
 
-.form-actions button {
+/* The two seeding controls share row one; the primary CTA spans beneath them.
+   `.randomize-button` is named alongside `button` because the upload control
+   is a <label> wrapping an .sr-only input — a bare `button` selector skips it
+   and it renders unpadded and half-height next to its siblings. */
+.form-actions button,
+.form-actions .randomize-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 45px;
   border-radius: 5px;
   font: 750 9px/1 var(--font-geist-mono), monospace;
@@ -1627,9 +1715,25 @@ textarea:focus-visible {
 .randomize-button {
   border: 1px solid var(--line-bright);
   background: transparent;
+  color: var(--text);
+}
+
+/* The file input this label wraps is .sr-only, so the label has to render the
+   focus ring or keyboard users get no target at all. */
+.form-actions .randomize-button:focus-within {
+  outline: 2px solid var(--line-bright);
+  outline-offset: 2px;
+}
+
+/* aria-disabled is advisory on a <label> — without this the picker still opens
+   mid-submit. */
+.form-actions .randomize-button[aria-disabled='true'] {
+  opacity: .45;
+  pointer-events: none;
 }
 
 .open-market-button {
+  grid-column: 1 / -1;
   border: 1px solid var(--yes);
   background: var(--yes);
   color: #101600;
@@ -2502,6 +2606,18 @@ textarea:focus-visible {
     height: 36px;
     padding: 0 11px;
     font-size: 8px;
+  }
+
+  /* The invite survives this breakpoint — the booth is where the QR actually
+     gets scanned. */
+  .invite-button {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 8px;
+  }
+
+  .invite-split strong {
+    font-size: 30px;
   }
 
   .live-tape {
@@ -3492,4 +3608,104 @@ textarea:focus-visible {
 body {
   overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ===========================================================================
+   Résumé sheet — the market's own card rendered as a one-page document.
+
+   Deliberately paper, not terminal: it is the artefact under examination, so
+   it should read as a thing submitted INTO the exchange rather than part of
+   the exchange's own chrome.
+   =========================================================================== */
+.resume-ask {
+  font: 700 13px/1 var(--font-geist-mono), monospace;
+  color: var(--warning);
+  letter-spacing: .04em;
+}
+
+.resume-sheet {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 46px 52px 54px;
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: 3px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .5);
+  font-family: var(--font-geist-sans), Georgia, serif;
+}
+
+.resume-sheet__head {
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--paper-ink);
+}
+.resume-sheet__head h3 {
+  margin: 0;
+  font-size: 27px;
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+.resume-sheet__tagline {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: color-mix(in srgb, var(--paper-ink) 68%, transparent);
+}
+.resume-sheet__facts {
+  margin: 18px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+}
+.resume-sheet__facts > div { display: grid; gap: 3px; }
+.resume-sheet__facts dt {
+  font: 700 8px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .14em;
+  color: color-mix(in srgb, var(--paper-ink) 55%, transparent);
+}
+.resume-sheet__facts dd {
+  margin: 0;
+  font: 700 13px/1 var(--font-geist-mono), monospace;
+}
+
+.resume-sheet__block { margin-top: 26px; }
+.resume-sheet__block h4 {
+  margin: 0 0 10px;
+  font: 700 9px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .18em;
+  color: color-mix(in srgb, var(--paper-ink) 60%, transparent);
+}
+.resume-sheet__block ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 9px;
+}
+.resume-sheet__block li {
+  font-size: 14.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.resume-sheet__empty {
+  margin: 26px 0 0;
+  font-size: 14px;
+  font-style: italic;
+  color: color-mix(in srgb, var(--paper-ink) 60%, transparent);
+}
+
+@media (max-width: 820px) {
+  .resume-sheet { padding: 30px 24px 36px; }
+  .resume-sheet__head h3 { font-size: 22px; }
+  .resume-sheet__facts { gap: 18px; }
+}
+
+/* Crank sits alongside roll/upload but reads as the escalation, not a reroll. */
+.crank-button {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.crank-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  border-color: var(--warning);
 }

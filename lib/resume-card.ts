@@ -73,8 +73,10 @@ function toCard(raw: Partial<ResumeCard>): ResumeCard | null {
  */
 export async function generateResumeCard(
   seed?: string | File,
+  opts?: { crank?: boolean },
 ): Promise<ResumeCard> {
   const isFile = typeof File !== 'undefined' && seed instanceof File;
+  const crank = opts?.crank === true;
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
@@ -86,6 +88,7 @@ export async function generateResumeCard(
     if (isFile) {
       const form = new FormData();
       form.append('file', seed);
+      if (crank) form.append('crank', 'true');
       res = await fetch('/api/resume', {
         method: 'POST',
         body: form,
@@ -95,7 +98,7 @@ export async function generateResumeCard(
       res = await fetch('/api/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seed: seed ?? '' }),
+        body: JSON.stringify({ seed: seed ?? '', crank }),
         signal: controller.signal,
       });
     }

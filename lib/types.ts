@@ -37,6 +37,14 @@ export interface MarketPublic {
   created_at: string;
   /** null while active. true = REAL (YES pays), false = LARP (NO pays). */
   is_real: boolean | null;
+  /**
+   * Cosmetic card extras from the résumé desk, both nullable: a hand-typed
+   * listing has neither, and bot-seeded markets carry a ticker but no tagline.
+   * Written by create_market (p_ticker / p_tagline), exposed by markets_public.
+   * Never load-bearing — nothing may infer is_real from their presence.
+   */
+  ticker: string | null;
+  tagline: string | null;
 }
 
 export interface Player {

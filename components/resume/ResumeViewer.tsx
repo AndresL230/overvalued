@@ -1,48 +1,39 @@
 'use client';
 
-import Image from 'next/image';
 import { useEffect, useRef } from 'react';
-import type { MarketPublic } from '@/lib/types';
+import { fmtTC, type MarketPublic } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
 // The submitted résumé, on exchange chrome: `.resume-modal` is a four-row grid
 // (head / meta / canvas / note) already sized and made full-bleed below 820px
 // by the stylesheet, so the markup here is only those four children in order.
+//
+// This renders THE MARKET'S OWN CARD as a one-page document. It previously
+// showed one of three stock résumé images picked by a checksum of the market
+// uuid — a fixture carried over from the clean-trade-modal prototype, which
+// had no real listings behind it. On live data that meant "Chief of Staff to
+// the Chief of Staff · $380K" opened a stranger's intern CV, which reads as
+// broken and, worse, implies the market is about that person.
+//
+// Everything below comes from markets_public: title, bullets, asking_tc,
+// ticker, tagline. No is_real anywhere — the document must not hint at the
+// answer the room is betting on.
 // ---------------------------------------------------------------------------
 
-const resumeExamples = [
-  {
-    id: 'SWE-INT-02',
-    assetUrl:
-      'https://q1hlr76qehnlfpdb.public.blob.vercel-storage.com/resumes/ec0c179b-7b4d-4acc-a8ab-8d210d5a6a35/r.png',
-    sourceUrl: 'https://resumes.fyi/yjyoo',
-    width: 1101,
-    height: 1425,
-  },
-  {
-    id: 'SWE-INT-03',
-    assetUrl:
-      'https://q1hlr76qehnlfpdb.public.blob.vercel-storage.com/resumes/120a4d05-313d-4b1b-a56d-ceb02db57745/r.png',
-    sourceUrl: 'https://resumes.fyi/asiangoat',
-    width: 1224,
-    height: 1584,
-  },
-  {
-    id: 'SWE-INT-04',
-    assetUrl:
-      'https://q1hlr76qehnlfpdb.public.blob.vercel-storage.com/resumes/20d5bd97-60ba-4290-b64b-654fa3739e2a/r.png',
-    sourceUrl: 'https://resumes.fyi/bradfordhderby',
-    width: 1224,
-    height: 1584,
-  },
-] as const;
+/** Section headings are decorative, but a résumé with none reads as a memo.
+ *  Bullets are dealt across these in order so the page has structure. */
+const SECTIONS = ['EXPERIENCE', 'SELECTED IMPACT', 'OTHER'] as const;
 
-function resumeForMarket(marketId: string) {
-  const checksum = [...marketId].reduce(
-    (sum, character) => sum + character.charCodeAt(0),
-    0,
-  );
-  return resumeExamples[checksum % resumeExamples.length];
+/** Deal bullets into at most three sections, front-loading the first. */
+function dealBullets(bullets: string[]): { heading: string; items: string[] }[] {
+  if (bullets.length === 0) return [];
+  if (bullets.length <= 2) return [{ heading: SECTIONS[0], items: bullets }];
+  const head = bullets.slice(0, Math.ceil(bullets.length / 2));
+  const tail = bullets.slice(Math.ceil(bullets.length / 2));
+  return [
+    { heading: SECTIONS[0], items: head },
+    { heading: SECTIONS[1], items: tail },
+  ];
 }
 
 export interface ResumeViewerProps {
@@ -54,7 +45,18 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
-  const resume = resumeForMarket(market.id);
+
+  // Bot-seeded markets carry a 4-char ticker prefix and no tagline, so both
+  // are treated as optional rather than assumed present.
+  const ticker = market.ticker?.trim() || market.id.slice(0, 4).toUpperCase();
+  const tagline = market.tagline?.trim() || null;
+  // Titles arrive as "Role · asking $380K" and occasionally with newlines from
+  // the model. Strip the asking clause — it has its own slot on the page.
+  const headline = market.title
+    .replace(/\s*[·|-]\s*asking\s+\$?[\d.,kKmM]+\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const sections = dealBullets(market.bullets.map((b) => b.trim()).filter(Boolean));
 
   useEffect(() => {
     previousFocus.current =
@@ -75,9 +77,9 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
           'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
-      if (!focusable.length) return;
+      if (focusable.length === 0) return;
       const first = focusable[0];
-      const last = focusable.at(-1) ?? first;
+      const last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -89,8 +91,8 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => {
-      cancelAnimationFrame(focusFrame);
       window.removeEventListener('keydown', onKeyDown);
+      cancelAnimationFrame(focusFrame);
       document.body.style.overflow = previousOverflow;
       const returnTarget = previousFocus.current;
       requestAnimationFrame(() => returnTarget?.isConnected && returnTarget.focus());
@@ -116,7 +118,7 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
       >
         <div className="modal-head">
           <div>
-            <span>SUBMITTED MATERIAL · {market.id.slice(0, 8).toUpperCase()}</span>
+            <span>SUBMITTED MATERIAL · {ticker}</span>
             <h2 id="resume-viewer-title">Résumé</h2>
           </div>
           <button ref={closeRef} type="button" onClick={onClose}>
@@ -126,31 +128,57 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
 
         <div className="resume-modal__meta">
           <div>
-            <span>SOFTWARE ENGINEER · INTERN</span>
-            <small>{resume.id} · REDACTED TEST SAMPLE</small>
+            <span>{headline}</span>
+            <small>ONE PAGE · SUBMITTED BY THE CANDIDATE</small>
           </div>
-          <a href={resume.sourceUrl} target="_blank" rel="noreferrer">
-            SOURCE ↗
-          </a>
+          <span className="resume-ask">{fmtTC(market.asking_tc)}</span>
         </div>
 
         <div className="resume-viewer-canvas">
-          <Image
-            src={resume.assetUrl}
-            width={resume.width}
-            height={resume.height}
-            sizes="(max-width: 640px) calc(100vw - 24px), 760px"
-            alt="Redacted software engineering intern résumé test sample"
-          />
+          <article className="resume-sheet">
+            <header className="resume-sheet__head">
+              <h3>{headline}</h3>
+              {tagline && <p className="resume-sheet__tagline">{tagline}</p>}
+              <dl className="resume-sheet__facts">
+                <div>
+                  <dt>ASKING</dt>
+                  <dd>{fmtTC(market.asking_tc)}</dd>
+                </div>
+                <div>
+                  <dt>TICKER</dt>
+                  <dd>{ticker}</dd>
+                </div>
+                <div>
+                  <dt>REFERENCES</dt>
+                  <dd>ON REQUEST</dd>
+                </div>
+              </dl>
+            </header>
+
+            {sections.map((section) => (
+              <section className="resume-sheet__block" key={section.heading}>
+                <h4>{section.heading}</h4>
+                <ul>
+                  {section.items.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+
+            {sections.length === 0 && (
+              <p className="resume-sheet__empty">
+                The candidate submitted no supporting lines.
+              </p>
+            )}
+          </article>
         </div>
 
         <p id="resume-viewer-note" className="resume-sample-note">
-          Test asset from the public resumes.fyi catalogue. It is not the identity of
-          this fictional market.
+          Submitted by the candidate. Whether any of it is true is what the market is
+          pricing.
         </p>
       </section>
     </div>
   );
 }
-
-export default ResumeViewer;
