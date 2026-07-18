@@ -38,7 +38,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-ink text-fg">
+      {/* No layout classes here on purpose: the exchange stylesheet's own
+          `body` rule is unlayered, so it outranks Tailwind's utilities layer
+          and was already winning. Sizing lives on .exchange-shell / .board-shell. */}
+      <body>
         <GameProvider>{children}</GameProvider>
       </body>
     </html>
