@@ -27,7 +27,10 @@ export function freshResume(flavor?: Flavor): Resume {
 }
 
 export interface RandomizeButtonProps {
-  onRoll: (resume: Resume) => void;
+  /** Synchronous wordlist roll. Ignored when `onRollAsync` is supplied. */
+  onRoll?: (resume: Resume) => void;
+  /** Async roll (model-backed). Takes precedence; must never reject. */
+  onRollAsync?: () => Promise<void>;
   flavor?: Flavor;
   disabled?: boolean;
   className?: string;
@@ -37,17 +40,26 @@ export interface RandomizeButtonProps {
 
 export function RandomizeButton({
   onRoll,
+  onRollAsync,
   flavor,
   disabled,
   className,
   compact,
 }: RandomizeButtonProps) {
   const [rolls, setRolls] = useState(0);
+  const [rolling, setRolling] = useState(false);
 
   const roll = useCallback(() => {
-    onRoll(freshResume(flavor));
     setRolls((n) => n + 1);
-  }, [onRoll, flavor]);
+    // Prefer the async source (the model) when the host supplies one; it
+    // resolves to a wordlist card on its own if the model is unavailable.
+    if (onRollAsync) {
+      setRolling(true);
+      void onRollAsync().finally(() => setRolling(false));
+      return;
+    }
+    onRoll?.(freshResume(flavor));
+  }, [onRoll, onRollAsync, flavor]);
 
   if (compact) {
     return (
@@ -83,10 +95,14 @@ export function RandomizeButton({
     >
       <span className="flex items-center justify-center gap-2.5">
         <span key={rolls} className="text-2xl leading-none">
-          🎲
+          {rolling ? '⏳' : '🎲'}
         </span>
         <span className="text-base font-extrabold uppercase tracking-wide text-gold">
-          {rolls === 0 ? 'Roll me a résumé' : 'Reroll'}
+          {rolling
+            ? 'Consulting the résumé desk…'
+            : rolls === 0
+              ? 'Roll me a résumé'
+              : 'Reroll'}
         </span>
       </span>
       <span className="mt-1 block text-[11px] text-muted">

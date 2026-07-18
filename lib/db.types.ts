@@ -45,6 +45,8 @@ export type Database = {
           is_real: boolean
           prob_yes_bps: number
           status: string
+          tagline: string | null
+          ticker: string | null
           title: string
         }
         Insert: {
@@ -57,6 +59,8 @@ export type Database = {
           is_real: boolean
           prob_yes_bps?: number
           status?: string
+          tagline?: string | null
+          ticker?: string | null
           title: string
         }
         Update: {
@@ -69,6 +73,8 @@ export type Database = {
           is_real?: boolean
           prob_yes_bps?: number
           status?: string
+          tagline?: string | null
+          ticker?: string | null
           title?: string
         }
         Relationships: [
@@ -261,6 +267,8 @@ export type Database = {
           is_real: boolean | null
           prob_yes_bps: number | null
           status: string | null
+          tagline: string | null
+          ticker: string | null
           title: string | null
         }
         Insert: {
@@ -273,6 +281,8 @@ export type Database = {
           is_real?: never
           prob_yes_bps?: number | null
           status?: string | null
+          tagline?: string | null
+          ticker?: string | null
           title?: string | null
         }
         Update: {
@@ -285,6 +295,8 @@ export type Database = {
           is_real?: never
           prob_yes_bps?: number | null
           status?: string | null
+          tagline?: string | null
+          ticker?: string | null
           title?: string | null
         }
         Relationships: [
@@ -306,16 +318,29 @@ export type Database = {
         Args: { p_code: string; p_new_player: string }
         Returns: Json
       }
-      create_market: {
-        Args: {
-          p_asking_tc: number
-          p_bullets: string[]
-          p_is_real: boolean
-          p_player: string
-          p_title: string
-        }
-        Returns: string
-      }
+      create_market:
+        | {
+            Args: {
+              p_asking_tc: number
+              p_bullets: string[]
+              p_is_real: boolean
+              p_player: string
+              p_title: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_asking_tc: number
+              p_bullets: string[]
+              p_is_real: boolean
+              p_player: string
+              p_tagline?: string
+              p_ticker?: string
+              p_title: string
+            }
+            Returns: string
+          }
       ensure_player: { Args: { p_handle: string; p_id: string }; Returns: Json }
       game_depth: { Args: never; Returns: number }
       gen_ref_code: { Args: never; Returns: string }

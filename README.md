@@ -87,12 +87,35 @@ minute, so a backgrounded projector tab would have frozen the board.
 client-side poll costs nothing and just acts as a fallback where `pg_cron`
 isn't available.
 
-### No AI, no API keys
+### The résumé desk (🎲)
 
-The 🎲 randomizer is a pure wordlist generator (`components/create/wordlists.ts`)
-— no model, no network call, no keys, no rate limits. Nothing summarizes
-résumés either; the board line-clamps bullets in CSS. The whole game runs with
-the wifi down, which is the right property for a booth.
+The dice asks Claude for one candidate card — ticker, inflated title, three
+delusional bullets, asking TC, and a tagline — via `POST /api/resume`.
+
+```bash
+# .env.local — server-side only, never NEXT_PUBLIC_
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+- Model: `claude-opus-4-8`, `effort: low`, no extended thinking. A booth
+  visitor is holding a phone waiting for the dice to land, so this is tuned
+  for latency, not depth.
+- The JSON shape is pinned with **structured outputs** (`output_config.format`),
+  not by asking the model to "return strict JSON" — a malformed card can't
+  reach the game.
+- `asking_tc` is clamped and rounded server-side so money stays on the integer
+  path the market uses.
+- The prompt deliberately writes the **same confident register** whether the
+  seed is impressive or empty, so the card never hints at whether the résumé
+  is real. That's what keeps the market honest.
+
+**No key required.** Without `ANTHROPIC_API_KEY` the route returns 503 and the
+client silently falls back to the local wordlist generator
+(`components/create/wordlists.ts`), showing "résumé desk offline". Same on
+network failure or a >9s timeout. The game still runs with the wifi down —
+which is the right property for a booth.
+
+Nothing summarizes résumés; the board line-clamps bullets in CSS.
 
 ---
 

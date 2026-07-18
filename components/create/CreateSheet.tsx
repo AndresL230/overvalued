@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fmtTC } from '@/lib/types';
+import { generateResumeCard } from '@/lib/resume-card';
 import { RandomizeButton } from './RandomizeButton';
 import { RealLarpToggle } from './RealLarpToggle';
 import { parseAskingTc, type Resume } from './wordlists';
@@ -59,6 +60,10 @@ function CreateSheetForm({
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
   const [shake, setShake] = useState(0);
+  // Card extras from the résumé desk. Cosmetic — a hand-typed résumé has none.
+  const [ticker, setTicker] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [offline, setOffline] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -91,6 +96,20 @@ function CreateSheetForm({
     setIsReal((cur) => (cur === null ? false : cur));
     setErrors({});
   }, []);
+
+  // Model-backed roll. generateResumeCard never rejects — it degrades to the
+  // local wordlists — so the dice always lands.
+  const rollFromDesk = useCallback(async () => {
+    const card = await generateResumeCard();
+    applyRoll({
+      title: card.title,
+      bullets: card.bullets,
+      askingTc: card.asking_tc,
+    });
+    setTicker(card.ticker);
+    setTagline(card.tagline);
+    setOffline(card.offline);
+  }, [applyRoll]);
 
   const setBulletAt = useCallback((i: number, v: string) => {
     setBullets((cur) => cur.map((b, j) => (j === i ? v : b)));
@@ -133,6 +152,8 @@ function CreateSheetForm({
       p_bullets: cleanBullets,
       p_asking_tc: askingTc as number,
       p_is_real: isReal as boolean,
+      p_ticker: ticker || null,
+      p_tagline: tagline || null,
     });
 
     if (error || !data) {
@@ -192,7 +213,12 @@ function CreateSheetForm({
 
         {/* body */}
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          <RandomizeButton onRoll={applyRoll} disabled={submitting} />
+          <RandomizeButton onRollAsync={rollFromDesk} disabled={submitting} />
+          {offline && (
+            <p className="mt-1 text-center text-[11px] text-muted">
+              résumé desk offline — rolled from the local wordlists
+            </p>
+          )}
 
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-line" />

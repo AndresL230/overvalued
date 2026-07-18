@@ -43,3 +43,6 @@ next-env.d.ts
 # supabase local
 /supabase/.temp/
 /supabase/.branches/
+
+# never commit real keys
+.env*.local.real
