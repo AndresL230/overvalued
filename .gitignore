@@ -49,3 +49,8 @@ next-env.d.ts
 
 # ...but the example template SHOULD be committed
 !.env.example
+
+# Local third-party résumé images contain personal data. Keep only their
+# provenance manifest in this public repository; the UI uses source assets.
+/resumes/*.png
+/resumes/*.webp

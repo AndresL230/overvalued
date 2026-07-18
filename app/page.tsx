@@ -12,6 +12,7 @@ import { CreateSheet } from '@/components/create';
 import { Portfolio } from '@/components/portfolio';
 import { RevealQueue } from '@/components/reveal';
 import { Leaderboard, type LeaderboardPlayer } from '@/components/leaderboard';
+import { ResumeViewer } from '@/components/resume';
 import { fmtCents } from '@/lib/types';
 
 type Tab = 'market' | 'portfolio' | 'leaders';
@@ -25,6 +26,7 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>('market');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [resumeMarketId, setResumeMarketId] = useState<string | null>(null);
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
   const [refDismissed, setRefDismissed] = useState(false);
 
@@ -42,6 +44,9 @@ export default function Home() {
   // is exactly the moment it matters most.
   const selected = selectedId
     ? markets.find((m) => m.id === selectedId) ?? null
+    : null;
+  const resumeMarket = resumeMarketId
+    ? markets.find((m) => m.id === resumeMarketId) ?? null
     : null;
 
   // The leaderboard is the only view that needs the player list, so it is
@@ -76,6 +81,7 @@ export default function Home() {
   const onFilled = useCallback(async () => {
     await refreshAll();
   }, [refreshAll]);
+  const closeResume = useCallback(() => setResumeMarketId(null), []);
 
   return (
     <div className="flex min-h-dvh flex-col bg-ink">
@@ -135,6 +141,7 @@ export default function Home() {
           <MarketBoard
             markets={markets}
             onSelect={(m) => setSelectedId(m.id)}
+            onViewResume={(m) => setResumeMarketId(m.id)}
           />
         )}
 
@@ -181,6 +188,13 @@ export default function Home() {
           open={!!selected}
           onClose={() => setSelectedId(null)}
           onFilled={onFilled}
+        />
+      )}
+
+      {resumeMarket && (
+        <ResumeViewer
+          market={resumeMarket}
+          onClose={closeResume}
         />
       )}
 
