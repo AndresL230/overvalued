@@ -52,7 +52,9 @@ test("ships the exchange, booth board, and bespoke social card", async () => {
 
   assert.match(app, /CANDIDATE EXCHANGE · NYC/);
   assert.match(app, /LIST YOURSELF/);
-  assert.match(app, /Trade the claim, not the person\./);
+  assert.match(app, /VIEW RÉSUMÉ/);
+  assert.match(app, /REDACTED TEST SAMPLE/);
+  assert.doesNotMatch(app, /resume-dossier/);
   assert.match(board, /NEXT REFERENCE CHECK/);
   assert.match(board, /TRADE FROM YOUR PHONE/);
   assert.match(styles, /prefers-reduced-motion:\s*reduce/);

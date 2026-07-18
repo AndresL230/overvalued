@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   formatCountdown,
@@ -14,8 +15,37 @@ import {
 
 type Side = "YES" | "NO";
 type TradeMode = "BUY" | "SELL";
-type Modal = "create" | "portfolio" | "rankings" | null;
+type Modal = "create" | "portfolio" | "rankings" | "resume" | null;
 type Position = { YES: number; NO: number };
+
+const resumeExamples = [
+  {
+    id: "SWE-INT-02",
+    assetUrl: "https://q1hlr76qehnlfpdb.public.blob.vercel-storage.com/resumes/ec0c179b-7b4d-4acc-a8ab-8d210d5a6a35/r.png",
+    sourceUrl: "https://resumes.fyi/yjyoo",
+    width: 1101,
+    height: 1425,
+  },
+  {
+    id: "SWE-INT-03",
+    assetUrl: "https://q1hlr76qehnlfpdb.public.blob.vercel-storage.com/resumes/120a4d05-313d-4b1b-a56d-ceb02db57745/r.png",
+    sourceUrl: "https://resumes.fyi/asiangoat",
+    width: 1224,
+    height: 1584,
+  },
+  {
+    id: "SWE-INT-04",
+    assetUrl: "https://q1hlr76qehnlfpdb.public.blob.vercel-storage.com/resumes/20d5bd97-60ba-4290-b64b-654fa3739e2a/r.png",
+    sourceUrl: "https://resumes.fyi/bradfordhderby",
+    width: 1224,
+    height: 1584,
+  },
+] as const;
+
+function resumeForMarket(marketId: string) {
+  const checksum = [...marketId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  return resumeExamples[checksum % resumeExamples.length];
+}
 
 const randomResumes = [
   {
@@ -371,6 +401,7 @@ export function OvervaluedApp() {
   }, [modal, tradeOpen]);
 
   const selected = markets.find((market) => market.id === selectedId) ?? markets[0];
+  const selectedResume = resumeForMarket(selected.id);
   const position = positions[selected.id] ?? { YES: 0, NO: 0 };
 
   const visibleMarkets = useMemo(() => {
@@ -534,7 +565,18 @@ export function OvervaluedApp() {
             <div>
               <p>REFERENCE CHECK</p>
               <h1>{selected.title}</h1>
-              <span className="stage-handle">OPENED BY {selected.handle}</span>
+              <div className="stage-support-row">
+                <span className="stage-handle">OPENED BY {selected.handle}</span>
+                <button
+                  className="resume-open-button"
+                  aria-haspopup="dialog"
+                  aria-controls="resume-viewer"
+                  onClick={() => setModal("resume")}
+                >
+                  <span>VIEW RÉSUMÉ</span>
+                  <small>1 PAGE ↗</small>
+                </button>
+              </div>
             </div>
             <div className="stage-probability">
               <strong>{selected.probability}<sup>%</sup></strong>
@@ -570,22 +612,6 @@ export function OvervaluedApp() {
             <ProbabilityRail probability={selected.probability} />
             <div className="rail-labels"><span>0 · LARP</span><span>50 · TOO CLOSE</span><span>100 · REAL</span></div>
           </div>
-
-          <article className="resume-dossier">
-            <div className="dossier-seal"><span>SEALED SELF-ATTESTATION</span><span>{selected.id}</span></div>
-            <div className="dossier-head">
-              <div><span>CANDIDATE</span><strong>{selected.handle.replace("@", "").replaceAll("_", " ")}</strong></div>
-              <div><span>ASKING TC</span><strong>{selected.askingTc}</strong></div>
-              <div><span>STATUS</span><strong>REFERENCE PENDING</strong></div>
-            </div>
-            <div className="dossier-section-label"><span>CLAIMS ON FILE</span><span>3 ITEMS</span></div>
-            <ol className="claim-list">
-              {selected.claims.map((claim, index) => (
-                <li key={claim}><span>{String(index + 1).padStart(2, "0")}</span><strong>{claim}</strong><small>SELF-REPORTED</small></li>
-              ))}
-            </ol>
-            <p className="ego-safety">Submitted by the candidate. Trade the claim, not the person.</p>
-          </article>
 
           <section className="market-activity" aria-label="Recent market activity">
             <div className="section-heading"><span>RECENT ACTIVITY</span><span>LIVE</span></div>
@@ -657,6 +683,31 @@ export function OvervaluedApp() {
                 </div>
               </div>
             </div>
+          </section>
+        </div>
+      )}
+
+      {modal === "resume" && (
+        <div className="modal-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setModal(null)}>
+          <section id="resume-viewer" className="resume-modal" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+            <div className="modal-head">
+              <div><span>{selected.id} · SUBMITTED MATERIAL</span><h2 id="resume-title">Résumé</h2></div>
+              <button onClick={() => setModal(null)}>CLOSE ×</button>
+            </div>
+            <div className="resume-modal__meta">
+              <div><span>SOFTWARE ENGINEER · INTERN</span><small>{selectedResume.id} · REDACTED TEST SAMPLE</small></div>
+              <a href={selectedResume.sourceUrl} target="_blank" rel="noreferrer">SOURCE ↗</a>
+            </div>
+            <div className="resume-viewer-canvas">
+              <Image
+                src={selectedResume.assetUrl}
+                width={selectedResume.width}
+                height={selectedResume.height}
+                alt="Redacted software engineering intern résumé test sample"
+                unoptimized
+              />
+            </div>
+            <p className="resume-sample-note">Test asset from the public resumes.fyi catalogue. It is not the identity of this fictional market.</p>
           </section>
         </div>
       )}

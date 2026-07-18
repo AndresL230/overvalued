@@ -41,3 +41,8 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# Local third-party résumé test images contain personal data. Keep only their
+# provenance manifest in the public repository; the UI uses the source assets.
+/resumes/*.png
+/resumes/*.webp
