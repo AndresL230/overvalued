@@ -2,17 +2,17 @@
 
 // ============================================================================
 // BOARD lane — one résumé market.
-// The whole card is the tap target (it opens the TRADE sheet); the only nested
-// control is the bullets toggle, which stops propagation.
+// The summary opens the market; the two quote buttons carry explicit side
+// intent into the ticket. Controls are siblings so keyboard behavior is sane.
 // ============================================================================
 
 import { useState } from 'react';
 import {
-  fmtCents,
   fmtTC,
   priceNoCents,
   priceYesCents,
   type MarketPublic,
+  type Side,
 } from '@/lib/types';
 import { OddsNumber } from './OddsNumber';
 import { Sparkline } from './Sparkline';
@@ -21,7 +21,7 @@ import { useOddsHistory } from './useOddsHistory';
 
 export interface MarketCardProps {
   market: MarketPublic;
-  onSelect?: (m: MarketPublic) => void;
+  onSelect?: (m: MarketPublic, side?: Side, trigger?: HTMLElement) => void;
   className?: string;
 }
 
@@ -40,7 +40,7 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
 
   const resolved = market.status === 'resolved';
   const checking = !resolved && done;
-  const interactive = Boolean(onSelect) && !resolved;
+  const interactive = Boolean(onSelect) && !resolved && !checking;
 
   const yes = priceYesCents(market.prob_yes_bps);
   const no = priceNoCents(market.prob_yes_bps);
@@ -62,87 +62,93 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
         : 'unknown'
     : null;
 
-  const activate = () => {
-    if (interactive) onSelect?.(market);
+  if (resolved) {
+    return (
+      <article
+        className={[
+          'rounded-xl border bg-surface px-4 py-3.5',
+          verdict === 'real'
+            ? 'border-yes/30'
+            : verdict === 'larp'
+              ? 'border-no/30'
+              : 'border-line',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div className="flex items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <div
+              className={`text-[10px] font-bold tracking-[0.16em] uppercase ${
+                verdict === 'real'
+                  ? 'text-yes'
+                  : verdict === 'larp'
+                    ? 'text-no'
+                    : 'text-muted'
+              }`}
+            >
+              {verdict === 'real'
+                ? 'Verified real'
+                : verdict === 'larp'
+                  ? 'Confirmed larp'
+                  : 'Resolved'}
+            </div>
+            <h3 className="mt-1.5 text-[15px] leading-snug font-semibold text-fg line-clamp-2">
+              {market.title}
+            </h3>
+            <p className="tnum mt-1 text-[11px] text-muted">
+              Asked{' '}
+              <span className="font-bold text-gold">
+                {fmtTC(market.asking_tc)}
+              </span>
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <OddsNumber
+              bps={market.prob_yes_bps}
+              className={`block text-3xl leading-none font-black tracking-[-0.04em] ${oddsTint}`}
+            />
+            <span className="mt-1 block text-[8px] font-bold tracking-[0.13em] text-muted uppercase">
+              Final real price
+            </span>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  const activate = (side: Side = 'yes', trigger?: HTMLElement) => {
+    if (interactive) onSelect?.(market, side, trigger);
   };
 
-  return (
-    <article
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (!interactive) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          activate();
-        }
-      }}
-      aria-label={
-        interactive
-          ? `${market.title}, ${Math.round(market.prob_yes_bps / 100)} percent real. Trade.`
-          : undefined
-      }
-      className={[
-        'relative isolate overflow-hidden rounded-2xl border bg-surface',
-        'px-4 pt-3.5 pb-4 transition-colors duration-150',
-        resolved
-          ? verdict === 'real'
-            ? 'border-yes/35 opacity-60'
-            : 'border-no/35 opacity-60'
-          : 'border-line',
-        interactive
-          ? 'cursor-pointer select-none hover:border-gold/35 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold active:scale-[0.995]'
-          : '',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {/* Price-move flash. Keyed so the CSS animation restarts every tick. */}
-      {dir && !resolved && (
-        <span
-          key={ticks}
-          aria-hidden="true"
-          className={`pointer-events-none absolute inset-0 -z-10 ${
-            dir === 'up' ? 'flash-up' : 'flash-down'
-          }`}
-        />
-      )}
-
-      {/* --- meta row ------------------------------------------------------ */}
+  const summary = (
+    <>
       <div className="flex items-center justify-between gap-3 text-[11px] font-semibold tracking-[0.14em] uppercase">
-        {resolved ? (
-          <span className={verdict === 'real' ? 'text-yes' : 'text-no'}>
-            {verdict === 'real' ? 'Verified real' : verdict === 'larp' ? 'Confirmed larp' : 'Resolved'}
-          </span>
-        ) : checking ? (
+        {checking ? (
           <span className="text-hot pulse-urgent">Reference check</span>
         ) : (
           <span className="flex items-center gap-1.5 text-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-yes" />
-            Live
+            Live market
           </span>
         )}
 
-        {!resolved && (
-          <span
-            className={`tnum tabular-nums ${
-              urgent ? 'text-hot pulse-urgent' : 'text-muted'
-            }`}
-          >
-            {checking ? 'CHECKING' : label}
-          </span>
-        )}
+        <span
+          className={`tnum tabular-nums ${
+            urgent ? 'text-hot pulse-urgent' : 'text-muted'
+          }`}
+        >
+          {checking ? 'CHECKING' : label}
+        </span>
       </div>
 
-      {/* --- headline ------------------------------------------------------ */}
       <div className="mt-2.5 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-[17px] leading-snug font-semibold text-fg line-clamp-2">
             {market.title}
           </h3>
-          <p className="mt-1 flex items-baseline gap-1.5 text-xs text-muted">
+          <p className="mt-1.5 flex items-baseline gap-1.5 text-xs text-muted">
             <span className="tracking-[0.1em] uppercase">Asking</span>
             <span className="tnum text-sm font-bold text-gold">
               {fmtTC(market.asking_tc)}
@@ -153,11 +159,11 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
         <div className="shrink-0 text-right">
           <OddsNumber
             bps={market.prob_yes_bps}
-            className={`block text-5xl leading-none font-black tracking-tight ${oddsTint}`}
+            className={`block text-[46px] leading-none font-black tracking-[-0.055em] ${oddsTint}`}
           />
-          <div className="mt-1 flex items-center justify-end gap-1.5 text-[10px] font-bold tracking-[0.12em] uppercase">
-            <span className="text-muted">Real</span>
-            {delta !== 0 && !resolved && (
+          <div className="mt-1 flex items-center justify-end gap-1.5 text-[9px] font-bold tracking-[0.14em] uppercase">
+            <span className="text-muted">Chance real</span>
+            {delta !== 0 && (
               <span className={`tnum ${delta > 0 ? 'text-yes' : 'text-no'}`}>
                 {delta > 0 ? '▲' : '▼'}
                 {Math.abs(Math.round(delta / 100))}
@@ -167,14 +173,51 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
         </div>
       </div>
 
-      {/* --- sparkline ----------------------------------------------------- */}
       <div className="mt-3 -mx-1">
-        <Sparkline points={history} height={40} />
+        <Sparkline points={history} height={36} />
       </div>
+    </>
+  );
+
+  return (
+    <article
+      className={[
+        'relative isolate overflow-hidden rounded-xl border bg-surface transition-colors duration-150',
+        'border-line',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {/* Price-move flash. Keyed so the CSS animation restarts every tick. */}
+      {dir && (
+        <span
+          key={ticks}
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 -z-10 ${
+            dir === 'up' ? 'flash-up' : 'flash-down'
+          }`}
+        />
+      )}
+
+      {interactive ? (
+        <button
+          type="button"
+          onClick={(event) => activate('yes', event.currentTarget)}
+          aria-label={`${market.title}, ${Math.round(
+            market.prob_yes_bps / 100,
+          )} percent real. Open market.`}
+          className="block w-full px-4 pt-3.5 pb-3 text-left transition-colors hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold active:bg-surface-2"
+        >
+          {summary}
+        </button>
+      ) : (
+        <div className="px-4 pt-3.5 pb-3">{summary}</div>
+      )}
 
       {/* --- bullets ------------------------------------------------------- */}
       {market.bullets.length > 0 && (
-        <div className="mt-3">
+        <div className="px-4 pb-3">
           {expanded ? (
             <ul className="space-y-1.5">
               {market.bullets.map((b, i) => (
@@ -203,7 +246,7 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
                 setExpanded((v) => !v);
               }}
               aria-expanded={expanded}
-              className="mt-1.5 -ml-1 rounded px-1 py-1 text-[11px] font-bold tracking-[0.12em] text-muted uppercase transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+              className="mt-1 -ml-1 inline-flex min-h-11 items-center rounded px-1 text-[11px] font-bold tracking-[0.12em] text-muted uppercase transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
             >
               {expanded ? 'Collapse' : `Read all ${market.bullets.length} lines`}
             </button>
@@ -212,49 +255,49 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
       )}
 
       {/* --- prices -------------------------------------------------------- */}
-      <div className="mt-3.5 grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-yes/40 bg-yes/10 px-3 py-2">
-          <div className="text-[10px] font-bold tracking-[0.16em] text-yes uppercase">
-            Yes · real
-          </div>
-          <div className="tnum mt-0.5 text-xl leading-none font-bold text-yes">
-            {cents(yes)}
-          </div>
-        </div>
-        <div className="rounded-xl border border-no/40 bg-no/10 px-3 py-2">
-          <div className="text-[10px] font-bold tracking-[0.16em] text-no uppercase">
-            No · larp
-          </div>
-          <div className="tnum mt-0.5 text-xl leading-none font-bold text-no">
-            {cents(no)}
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-2 px-4 pb-4">
+        {interactive ? (
+          <>
+            <button
+              type="button"
+              onClick={(event) => activate('yes', event.currentTarget)}
+              aria-label={`Buy YES, real, at ${yes} cents`}
+              className="flex min-h-12 items-center justify-between rounded-lg border border-yes/45 bg-yes/10 px-3 text-left text-yes transition-colors hover:bg-yes/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yes active:bg-yes/25"
+            >
+              <span className="text-[10px] font-black tracking-[0.13em] uppercase">
+                Yes · real
+              </span>
+              <span className="tnum text-lg font-black">{cents(yes)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={(event) => activate('no', event.currentTarget)}
+              aria-label={`Buy NO, larp, at ${no} cents`}
+              className="flex min-h-12 items-center justify-between rounded-lg border border-no/45 bg-no/10 px-3 text-left text-no transition-colors hover:bg-no/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-no active:bg-no/25"
+            >
+              <span className="text-[10px] font-black tracking-[0.13em] uppercase">
+                No · larp
+              </span>
+              <span className="tnum text-lg font-black">{cents(no)}</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="rounded-lg border border-yes/20 bg-ink/40 px-3 py-2 text-yes/70">
+              <div className="text-[9px] font-bold tracking-[0.13em] uppercase">
+                Yes · real
+              </div>
+              <div className="tnum mt-0.5 text-lg font-black">{cents(yes)}</div>
+            </div>
+            <div className="rounded-lg border border-no/20 bg-ink/40 px-3 py-2 text-no/70">
+              <div className="text-[9px] font-bold tracking-[0.13em] uppercase">
+                No · larp
+              </div>
+              <div className="tnum mt-0.5 text-lg font-black">{cents(no)}</div>
+            </div>
+          </>
+        )}
       </div>
-
-      {/* Winners paid 100¢/share; make the stake legible without a tooltip. */}
-      {!resolved && (
-        <p className="mt-2 text-[11px] text-muted">
-          Winning shares pay {fmtCents(100)} each
-        </p>
-      )}
-
-      {/* --- resolved stamp ------------------------------------------------ */}
-      {resolved && verdict !== 'unknown' && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2"
-        >
-          <span
-            className={`stamp block rounded-lg border-4 px-3 py-1 text-2xl font-black tracking-[0.08em] uppercase ${
-              verdict === 'real'
-                ? 'border-yes/70 text-yes'
-                : 'border-no/70 text-no'
-            }`}
-          >
-            {verdict === 'real' ? 'Real' : 'Larp'}
-          </span>
-        </div>
-      )}
     </article>
   );
 }

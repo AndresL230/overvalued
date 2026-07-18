@@ -23,8 +23,8 @@ interface CellProps {
 function Cell({ label, sub, price, active, tone, disabled, onClick }: CellProps) {
   const activeCls =
     tone === 'yes'
-      ? 'bg-yes text-ink border-yes shadow-[0_0_28px_-6px_var(--color-yes)]'
-      : 'bg-no text-ink border-no shadow-[0_0_28px_-6px_var(--color-no)]';
+      ? 'bg-yes text-ink border-yes'
+      : 'bg-no text-ink border-no';
   const idleCls =
     tone === 'yes'
       ? 'bg-yes/10 text-yes border-yes/30 hover:bg-yes/20 hover:border-yes/50'
@@ -40,7 +40,7 @@ function Cell({ label, sub, price, active, tone, disabled, onClick }: CellProps)
       onClick={onClick}
       className={[
         'flex min-h-[68px] flex-1 flex-col items-center justify-center gap-0.5',
-        'rounded-xl border-2 px-3 py-2 transition-all duration-150 select-none',
+        'rounded-lg border-2 px-3 py-2 transition-all duration-150 select-none',
         'active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40',
         active ? activeCls : idleCls,
       ].join(' ')}

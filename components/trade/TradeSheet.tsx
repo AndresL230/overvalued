@@ -26,6 +26,10 @@ export interface TradeSheetProps {
   cash: number;
   position?: { yes: number; no: number };
   open: boolean;
+  /** Side chosen from the market card price button. */
+  initialSide?: Side;
+  /** Exact card control that opened the sheet, used for focus restoration. */
+  returnFocusTo?: HTMLElement | null;
   onClose: () => void;
   /** fires after a confirmed fill so the owner can refresh cash + positions */
   onFilled?: (r: TradeResult) => void;
@@ -64,6 +68,7 @@ interface TicketProps {
   playerId: string;
   cash: number;
   position?: { yes: number; no: number };
+  initialSide: Side;
   locked: boolean;
   onFilled?: (r: TradeResult) => void;
 }
@@ -73,10 +78,11 @@ function TradeTicket({
   playerId,
   cash,
   position,
+  initialSide,
   locked,
   onFilled,
 }: TicketProps) {
-  const [side, setSide] = useState<Side>('yes');
+  const [side, setSide] = useState<Side>(initialSide);
   const [rawAction, setRawAction] = useState<TradeAction>('buy');
   const [rawShares, setRawShares] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -238,7 +244,7 @@ function TradeTicket({
                       setError(null);
                     }}
                     className={[
-                      'min-h-[40px] flex-1 rounded-lg text-[12px] font-black tracking-[0.16em] uppercase transition-colors',
+                      'min-h-11 flex-1 rounded-lg text-[12px] font-black tracking-[0.16em] uppercase transition-colors',
                       'disabled:cursor-not-allowed disabled:opacity-40',
                       action === a
                         ? 'bg-surface-2 text-fg'
@@ -320,13 +326,13 @@ function TradeTicket({
           disabled={!canSubmit}
           onClick={submit}
           className={[
-            'min-h-[58px] w-full rounded-xl text-base font-black tracking-[0.12em] uppercase',
+            'min-h-[58px] w-full rounded-lg text-base font-black tracking-[0.12em] uppercase',
             'transition-all duration-150 active:scale-[0.985]',
             'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted disabled:shadow-none',
             canSubmit && side === 'yes'
-              ? 'bg-yes text-ink shadow-[0_0_32px_-8px_var(--color-yes)]'
+              ? 'bg-yes text-ink'
               : canSubmit
-                ? 'bg-no text-ink shadow-[0_0_32px_-8px_var(--color-no)]'
+                ? 'bg-no text-ink'
                 : '',
           ].join(' ')}
         >
@@ -357,6 +363,8 @@ export function TradeSheet({
   cash,
   position,
   open,
+  initialSide = 'yes',
+  returnFocusTo,
   onClose,
   onFilled,
 }: TradeSheetProps) {
@@ -366,15 +374,47 @@ export function TradeSheet({
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closingRef = useRef(false);
+  const enterFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    if (enterFrameRef.current !== null) {
+      cancelAnimationFrame(enterFrameRef.current);
+      enterFrameRef.current = null;
+    }
+    setShown(false);
+    closeTimerRef.current = setTimeout(() => {
+      onCloseRef.current();
+    }, EXIT_MS);
+  }, []);
 
   // enter / exit choreography
   useEffect(() => {
     if (open) {
-      const r = requestAnimationFrame(() => {
+      closingRef.current = false;
+      enterFrameRef.current = requestAnimationFrame(() => {
+        enterFrameRef.current = null;
+        if (closingRef.current) return;
         setLingering(true);
         setShown(true);
       });
-      return () => cancelAnimationFrame(r);
+      return () => {
+        if (enterFrameRef.current !== null) {
+          cancelAnimationFrame(enterFrameRef.current);
+          enterFrameRef.current = null;
+        }
+      };
     }
     const r = requestAnimationFrame(() => setShown(false));
     const t = setTimeout(() => setLingering(false), EXIT_MS);
@@ -391,20 +431,69 @@ export function TradeSheet({
     return () => clearInterval(i);
   }, [open]);
 
-  // esc to dismiss + body scroll lock
+  // Modal lifecycle: focus enters the sheet, stays inside it, and returns to
+  // the exact card control that opened it after the exit motion completes.
   useEffect(() => {
     if (!open) return;
+    openerRef.current = returnFocusTo?.isConnected
+      ? returnFocusTo
+      : document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    const focusFrame = requestAnimationFrame(() => {
+      closeButtonRef.current?.focus({ preventScroll: true });
+    });
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        requestClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((node) => !node.hasAttribute('hidden'));
+      if (focusable.length === 0) {
+        e.preventDefault();
+        panelRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
+      cancelAnimationFrame(focusFrame);
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      const preferred = openerRef.current;
+      requestAnimationFrame(() => {
+        const target =
+          preferred?.isConnected && !preferred.closest('[inert]')
+            ? preferred
+            : document.querySelector<HTMLElement>(
+                'nav[aria-label="Primary"] button[aria-current="page"]:not([disabled])',
+              );
+        target?.focus({ preventScroll: true });
+      });
     };
-  }, [open, onClose]);
+  }, [open, requestClose, returnFocusTo]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     dragStart.current = e.clientY;
@@ -421,7 +510,7 @@ export function TradeSheet({
     dragStart.current = null;
     setDragging(false);
     setDragY(0);
-    if (shouldClose) onClose();
+    if (shouldClose) requestClose();
   };
 
   if (!open && !lingering) return null;
@@ -435,21 +524,23 @@ export function TradeSheet({
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
-      aria-label={`Trade ${market.title}`}
+      aria-labelledby="trade-sheet-title"
     >
       {/* scrim */}
       <button
         type="button"
         aria-label="Close trade ticket"
-        onClick={onClose}
+        onClick={requestClose}
         className={[
-          'absolute inset-0 bg-black/75 backdrop-blur-sm transition-opacity duration-200',
+          'absolute inset-0 bg-black/78 transition-opacity duration-200',
           shown ? 'opacity-100' : 'opacity-0',
         ].join(' ')}
       />
 
       {/* panel */}
       <div
+        ref={panelRef}
+        tabIndex={-1}
         style={{
           transform: shown ? `translateY(${dragY}px)` : 'translateY(100%)',
           transition: dragging
@@ -457,9 +548,9 @@ export function TradeSheet({
             : 'transform 220ms cubic-bezier(0.22,1,0.36,1)',
         }}
         className={[
-          'relative flex max-h-[92dvh] w-full flex-col overflow-hidden',
-          'rounded-t-3xl border border-line bg-surface shadow-[0_-24px_60px_-12px_rgba(0,0,0,0.9)]',
-          'sm:max-w-md sm:rounded-3xl sm:shadow-[0_24px_80px_-12px_rgba(0,0,0,0.95)]',
+          'relative flex max-h-[88dvh] w-full flex-col overflow-hidden outline-none',
+          'rounded-t-[24px] border border-line bg-surface shadow-[0_-24px_60px_-12px_rgba(0,0,0,0.9)]',
+          'sm:max-w-md sm:rounded-[24px] sm:shadow-[0_24px_80px_-12px_rgba(0,0,0,0.95)]',
         ].join(' ')}
       >
         {/* grab handle / header */}
@@ -474,7 +565,7 @@ export function TradeSheet({
 
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="truncate text-[15px] leading-snug font-bold text-fg">
+              <h2 id="trade-sheet-title" className="truncate text-[15px] leading-snug font-bold text-fg">
                 {market.title}
               </h2>
               <p className="tnum mt-0.5 text-[11px] tracking-[0.1em] text-muted uppercase">
@@ -485,12 +576,18 @@ export function TradeSheet({
                   {locked ? 'closed' : fmtCountdown(msLeft)}
                 </span>
               </p>
+              {market.bullets[0] ? (
+                <p className="mt-1.5 text-[12px] leading-snug text-muted line-clamp-1">
+                  {market.bullets[0]}
+                </p>
+              ) : null}
             </div>
             <button
+              ref={closeButtonRef}
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="Close"
-              className="-mt-1 -mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-muted transition-colors hover:bg-surface-2 hover:text-fg"
+              className="-mt-1 -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-muted transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
             >
               ×
             </button>
@@ -498,11 +595,12 @@ export function TradeSheet({
         </div>
 
         <TradeTicket
-          key={market.id}
+          key={`${market.id}:${initialSide}`}
           market={market}
           playerId={playerId}
           cash={cash}
           position={position}
+          initialSide={initialSide}
           locked={locked}
           onFilled={onFilled}
         />
