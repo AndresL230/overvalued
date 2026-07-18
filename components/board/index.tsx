@@ -12,7 +12,6 @@ export {
   useOddsHistory,
   useRecentMoves,
   getOddsHistory,
-  seedOddsHistory,
   recordOdds,
   resetOddsHistory,
   MAX_POINTS,

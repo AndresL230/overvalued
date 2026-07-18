@@ -12,7 +12,7 @@ import { CreateSheet } from '@/components/create';
 import { Portfolio } from '@/components/portfolio';
 import { RevealQueue } from '@/components/reveal';
 import { Leaderboard, type LeaderboardPlayer } from '@/components/leaderboard';
-import { fmtCents, type MarketPublic, type TradeResult } from '@/lib/types';
+import { fmtCents } from '@/lib/types';
 
 type Tab = 'market' | 'portfolio' | 'leaders';
 
@@ -26,7 +26,16 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
-  const [refBanner, setRefBanner] = useState<string | null>(null);
+  const [refDismissed, setRefDismissed] = useState(false);
+
+  // Derived, not synced into state — React 19 rightly rejects a setState that
+  // runs synchronously in an effect just to mirror a prop.
+  const refBanner =
+    refClaim && !refDismissed
+      ? refClaim.ok
+        ? '🎁 Referral claimed — you and your friend both got $50.'
+        : `Referral: ${refClaim.error}`
+      : null;
 
   // Bind the trade sheet to the LIVE row by id, not to a snapshot — otherwise
   // the price in the ticket goes stale the moment someone else trades, which
@@ -35,36 +44,33 @@ export default function Home() {
     ? markets.find((m) => m.id === selectedId) ?? null
     : null;
 
-  const loadPlayers = useCallback(async () => {
-    const { data } = await supabase
+  // The leaderboard is the only view that needs the player list, so it is
+  // fetched on demand rather than kept live in the provider.
+  useEffect(() => {
+    if (tab !== 'leaders') return;
+    let alive = true;
+    void supabase
       .from('players')
       .select('id, handle, cash, ref_code, created_at, is_bot')
       .order('cash', { ascending: false })
-      .limit(100);
-    if (data) setPlayers(data as LeaderboardPlayer[]);
-  }, []);
+      .limit(100)
+      .then(({ data }) => {
+        if (alive && data) setPlayers(data as LeaderboardPlayer[]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tab, refreshKey]);
 
   useEffect(() => {
-    if (tab === 'leaders') void loadPlayers();
-  }, [tab, refreshKey, loadPlayers]);
-
-  useEffect(() => {
-    if (!refClaim) return;
-    setRefBanner(
-      refClaim.ok
-        ? '🎁 Referral claimed — you and your friend both got $50.'
-        : `Referral: ${refClaim.error}`,
-    );
-    const t = setTimeout(() => setRefBanner(null), 6000);
+    if (!refBanner) return;
+    const t = setTimeout(() => setRefDismissed(true), 6000);
     return () => clearTimeout(t);
-  }, [refClaim]);
+  }, [refBanner]);
 
-  const onFilled = useCallback(
-    async (_r: TradeResult) => {
-      await refreshAll();
-    },
-    [refreshAll],
-  );
+  const onFilled = useCallback(async () => {
+    await refreshAll();
+  }, [refreshAll]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-ink">

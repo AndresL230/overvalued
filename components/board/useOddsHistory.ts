@@ -34,15 +34,6 @@ export function getOddsHistory(marketId: string): OddsPoint[] {
   return store.get(marketId) ?? [];
 }
 
-/** Create the series if we have never seen this market. Idempotent. */
-export function seedOddsHistory(marketId: string, bps: number): OddsPoint[] {
-  const existing = store.get(marketId);
-  if (existing && existing.length > 0) return existing;
-  const seeded: OddsPoint[] = [{ bps, t: Date.now() }];
-  store.set(marketId, seeded);
-  return seeded;
-}
-
 /**
  * Append a point, but only when the value actually moved. Calling this twice
  * with the same value is a no-op that returns the identical array reference.
@@ -91,8 +82,10 @@ export function useOddsHistory(
   bps: number,
   max = MAX_POINTS,
 ): UseOddsHistory {
+  // recordOdds (not a plain seed) so a card that remounts after the price
+  // moved still captures that move instead of showing a stale series.
   const [history, setHistory] = useState<OddsPoint[]>(() =>
-    seedOddsHistory(marketId, bps),
+    recordOdds(marketId, bps, max),
   );
   const [ticks, setTicks] = useState(0);
   const [seen, setSeen] = useState<{ id: string; bps: number }>({
