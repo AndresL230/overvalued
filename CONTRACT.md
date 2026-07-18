@@ -33,7 +33,22 @@ trades(id bigint pk, player_id uuid, market_id uuid, side text, action text,
        shares int, price_cents int, ts timestamptz)
 referrals(id bigint pk, code text, referrer_id uuid, referee_id uuid,
           claimed bool, ts timestamptz)   -- unique(referee_id)
+
+-- server-only, added by 20260718040000_livelier_bots.sql. no anon grant,
+-- RLS on with no policy. never client-read — do not query these from a lane.
+bot_leans(bot_id uuid, market_id uuid, lean text, conviction int,
+          refresh_at timestamptz, pk(bot_id, market_id))
+bot_market_templates(id bigint pk, title text, bullets text[], asking_tc int,
+                     is_real bool, used_at timestamptz)
 ```
+
+`bot_market_templates.is_real` is the **same secret** as `markets.is_real` — it
+is the answer to a market that has not been minted yet. Neither bot table is
+reachable by `anon` at all.
+
+`service_role` holds `select` on `players` and `markets` so `/api/bot-leans` can
+read `is_real` to give bots an informed lean. Server-only; the key never reaches
+the browser, and `anon`'s column-level grant still omits `is_real`.
 
 `status` is `'active' | 'resolved'`. `side` is `'yes' | 'no'`. `action` is
 `'buy' | 'sell'`.
@@ -147,9 +162,18 @@ supabase.rpc('resolve_expired') // → number (count resolved)
 supabase.rpc('claim_referral', { p_code: string, p_new_player: string })
   // → ReferralResult
 
-// Nudges a random active market. Internally rate-limited to one nudge per
-// 1.5s, so N clients polling it does NOT produce N× the movement.
-supabase.rpc('bot_tick') // → Json
+// Nudges active markets. p_nudges defaults to 1, so the no-arg call below is
+// unchanged; pg_cron calls bot_tick(3). Clamped to 10.
+//
+// Serialised by a transactional advisory lock: concurrent callers return
+// { ok: true, skipped: true, reason: 'tick already running' } rather than
+// deadlocking on the `players ... for update` that trade() takes. Rate floor is
+// 400ms, so N clients polling still does NOT produce N× the movement.
+//
+// Each nudge also tops bots under $20 back up to $100, and re-seeds ONE market
+// from bot_market_templates when active count < 5 — so the board never empties.
+supabase.rpc('bot_tick')            // → Json
+supabase.rpc('bot_tick', { p_nudges: 3 })
 
 // Host panel only. Wipes the board, resets every player to $100, reseeds bots.
 supabase.rpc('reset_game') // → void
@@ -202,6 +226,13 @@ The realtime payload carries the `markets` row **without `is_real`** (column
 grant). When a row flips to `status='resolved'`, the provider refetches
 `markets_public` to pick up the revealed `is_real`. Never infer the answer from
 the price.
+
+### `lib/db.types.ts` is knowingly stale
+
+It does **not** describe `bot_leans` or `bot_market_templates`. This is
+deliberate: neither table has an anon grant and neither is ever client-read, so
+regenerating buys nothing. `/api/bot-leans` uses an untyped service-role client.
+Regenerate if a lane ever needs them from the client — but no lane should.
 
 ### Identity
 
