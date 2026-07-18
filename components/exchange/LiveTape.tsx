@@ -49,6 +49,17 @@ export function LiveTape({ fills }: { fills: TapeFill[] }) {
 
   const doubled = [...fills, ...fills];
 
+  // Constant scroll SPEED, not constant duration.
+  //
+  // The track always travels -50% of its own width, and that width grows with
+  // every fill (up to TAPE_LIMIT). A fixed duration therefore scrolls ~40x
+  // faster with a full tape than an empty one — which is why it ran away once
+  // the bots filled it up. Scaling duration with the fill count keeps
+  // pixels-per-second flat, so it reads the same at 3 fills or 40.
+  const SECONDS_PER_FILL = 3.2;
+  const MIN_DURATION_S = 12;
+  const durationS = Math.max(MIN_DURATION_S, fills.length * SECONDS_PER_FILL);
+
   return (
     <div className="live-tape" aria-label="Live trades">
       <span className="live-tape__label">
@@ -57,7 +68,10 @@ export function LiveTape({ fills }: { fills: TapeFill[] }) {
       {/* aria-hidden: the duplicated track would read every fill twice. The
           per-market activity list below is the accessible view of this data. */}
       <div className="live-tape__viewport" aria-hidden="true">
-        <div className="live-tape__track">
+        <div
+          className="live-tape__track"
+          style={{ '--tape-duration': `${durationS}s` } as React.CSSProperties}
+        >
           {doubled.map((fill, index) => (
             <span className="tape-trade" key={`${fill.id}-${index}`}>
               <strong>{atHandle(fill.handle)}</strong>{' '}

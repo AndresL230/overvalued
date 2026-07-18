@@ -91,7 +91,10 @@
 .pulse-urgent { animation: ov-pulse-urgent 1s steps(2, end) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .flash-up, .flash-down, .shake, .stamp, .pulse-urgent {
+  .flash-up, .flash-down, .shake, .stamp, .pulse-urgent,
+  /* A perpetually scrolling marquee is the canonical case this query exists
+     for — it never stops, so it can't be waited out. */
+  .live-tape__track {
     animation: none !important;
   }
 }
@@ -421,7 +424,11 @@ textarea:focus-visible {
   width: max-content;
   display: flex;
   align-items: center;
-  animation: ticker-scroll 34s linear infinite;
+  /* Duration is set per-render from the fill count (see LiveTape.tsx).
+     A fixed duration would scroll faster the more fills accumulate, because
+     the track always travels -50% of its own width — and that width grows
+     with every trade. The fallback matches roughly 10 fills. */
+  animation: ticker-scroll var(--tape-duration, 34s) linear infinite;
 }
 
 .live-tape__viewport:hover .live-tape__track,
