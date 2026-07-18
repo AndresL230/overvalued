@@ -217,6 +217,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'markets' },
         (payload) => {
+          // reset_game() deletes every market. DELETE carries no `new` row, so
+          // without this the board would keep showing markets that are gone.
+          if (payload.eventType === 'DELETE') {
+            void refreshMarkets();
+            void refreshPositions();
+            return;
+          }
+
           const row = payload.new as Partial<MarketPublic> & { id?: string };
           if (!row?.id) return;
 
@@ -250,10 +258,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const { data } = await supabase.rpc('resolve_expired');
       if (typeof data === 'number' && data > 0) {
         await refreshMarkets();
-        await refreshPlayer();
         await refreshPositions();
         setRefreshKey((k) => k + 1);
       }
+      // Cash is also moved by things this client never sees: a friend claiming
+      // your referral, or the host hitting reset_game(). Re-reading one indexed
+      // row every tick is cheap and keeps the headline number honest.
+      await refreshPlayer();
     }, RESOLVE_POLL_MS);
 
     const botTimer = setInterval(() => {
