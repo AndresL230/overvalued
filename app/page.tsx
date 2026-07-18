@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { useGame } from '@/components/providers/GameProvider';
 import { Portfolio } from '@/components/portfolio';
 import { RevealQueue } from '@/components/reveal';
+import { ResumeViewer } from '@/components/resume';
 import { Leaderboard, type LeaderboardPlayer } from '@/components/leaderboard';
 import { fmtCents, isExpired, msUntil, type MarketPublic, type Side } from '@/lib/types';
 import { LiveTape } from '@/components/exchange/LiveTape';
@@ -52,6 +53,7 @@ export default function Home() {
   const [toast, setToast] = useState<string | null>(null);
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
   const [refDismissed, setRefDismissed] = useState(false);
+  const [resumeMarketId, setResumeMarketId] = useState<string | null>(null);
 
   const stageRef = useRef<HTMLElement | null>(null);
   const { fills, volume, handles } = useExchangeData(refreshKey);
@@ -148,6 +150,11 @@ export default function Home() {
     },
     [refreshAll],
   );
+
+  const resumeMarket = resumeMarketId
+    ? (markets.find((m) => m.id === resumeMarketId) ?? null)
+    : null;
+  const closeResume = useCallback(() => setResumeMarketId(null), []);
 
   const held = selected ? (positions[selected.id] ?? { yes: 0, no: 0 }) : { yes: 0, no: 0 };
   const activeCount = markets.filter((m) => !isExpired(m)).length;
@@ -263,7 +270,7 @@ export default function Home() {
             stageRef={stageRef}
             ticketOpen={ticketOpen}
             onTrade={(nextSide) => player && openTicket(selected.id, nextSide)}
-            onViewResume={() => stageRef.current?.scrollIntoView({ block: 'start' })}
+            onViewResume={() => setResumeMarketId(selected.id)}
           />
         ) : (
           <section className="market-stage" ref={stageRef}>
@@ -388,6 +395,8 @@ export default function Home() {
           }}
         />
       )}
+
+      {resumeMarket && <ResumeViewer market={resumeMarket} onClose={closeResume} />}
 
       <RevealQueue pending={reveals} onDone={dismissReveal} />
 
