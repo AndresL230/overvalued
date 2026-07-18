@@ -30,6 +30,7 @@ import { MarketRow } from '@/components/exchange/MarketRow';
 import { MarketStage } from '@/components/exchange/MarketStage';
 import { TradeTicket } from '@/components/exchange/TradeTicket';
 import { CreateModal } from '@/components/exchange/CreateModal';
+import { InviteModal, bonusLabel } from '@/components/referral';
 import { useExchangeData } from '@/components/exchange/useExchangeData';
 
 type Panel = 'portfolio' | 'rankings' | null;
@@ -48,6 +49,7 @@ export default function Home() {
   const [ticketOpen, setTicketOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [creating, setCreating] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [sort, setSort] = useState<Sort>('ending');
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState<string | null>(null);
@@ -186,6 +188,15 @@ export default function Home() {
           <button className="cash-button" onClick={() => setPanel('portfolio')}>
             <span>CASH</span>
             <strong>{player ? fmtCents(player.cash) : '—'}</strong>
+          </button>
+          {/* Stays visible at the mobile breakpoint alongside LIST — the booth
+              case is exactly where the QR and share sheet get used. */}
+          <button
+            className="invite-button"
+            disabled={!player}
+            onClick={() => player && setInviting(true)}
+          >
+            INVITE · {bonusLabel()}
           </button>
           <button
             className="list-button"
@@ -353,6 +364,12 @@ export default function Home() {
               markets={markets}
               refreshKey={refreshKey}
               onGoTrade={() => setPanel(null)}
+              onInvite={() => {
+                // Close the panel first — two stacked modal layers trap focus
+                // in the wrong one.
+                setPanel(null);
+                setInviting(true);
+              }}
             />
           </section>
         </div>
@@ -394,6 +411,10 @@ export default function Home() {
             setToast('MARKET OPEN · Reference check closes in 15:00');
           }}
         />
+      )}
+
+      {player && inviting && (
+        <InviteModal player={player} onClose={() => setInviting(false)} />
       )}
 
       {resumeMarket && <ResumeViewer market={resumeMarket} onClose={closeResume} />}

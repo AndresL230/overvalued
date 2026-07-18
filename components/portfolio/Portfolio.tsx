@@ -28,6 +28,8 @@ export interface PortfolioProps {
   refreshKey?: number;
   /** Optional nudge action for the empty state. */
   onGoTrade?: () => void;
+  /** Opens the invite modal; the page closes this panel first. */
+  onInvite?: () => void;
   className?: string;
 }
 
@@ -36,6 +38,7 @@ export function Portfolio({
   markets,
   refreshKey = 0,
   onGoTrade,
+  onInvite,
   className = '',
 }: PortfolioProps) {
   const [positions, setPositions] = useState<Position[]>([]);
@@ -121,7 +124,7 @@ export function Portfolio({
         onGoTrade={onGoTrade}
       />
 
-      <ReferralCard player={player} />
+      <ReferralCard player={player} onInvite={onInvite} />
     </div>
   );
 }
