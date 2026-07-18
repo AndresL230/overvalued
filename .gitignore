@@ -46,3 +46,6 @@ next-env.d.ts
 
 # never commit real keys
 .env*.local.real
+
+# ...but the example template SHOULD be committed
+!.env.example
