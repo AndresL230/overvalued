@@ -120,7 +120,7 @@ function MarketRow({
   market: Market;
   selected: boolean;
   onSelect: () => void;
-  onTrade: (side: Side) => void;
+  onTrade: (side: Side, trigger: HTMLElement) => void;
 }) {
   const noPrice = 100 - market.probability;
   return (
@@ -148,10 +148,16 @@ function MarketRow({
         </span>
       </button>
       <div className="market-row__actions">
-        <button className="micro-trade micro-trade--yes" onClick={() => onTrade("YES")}>
+        <button
+          className="micro-trade micro-trade--yes"
+          onClick={(event) => onTrade("YES", event.currentTarget)}
+        >
           YES <strong>{market.probability}¢</strong>
         </button>
-        <button className="micro-trade micro-trade--no" onClick={() => onTrade("NO")}>
+        <button
+          className="micro-trade micro-trade--no"
+          onClick={(event) => onTrade("NO", event.currentTarget)}
+        >
           NO <strong>{noPrice}¢</strong>
         </button>
       </div>
@@ -166,7 +172,6 @@ function TradeTicket({
   shares,
   cash,
   position,
-  mobileOpen,
   onClose,
   onSide,
   onMode,
@@ -179,7 +184,6 @@ function TradeTicket({
   shares: number;
   cash: number;
   position: Position;
-  mobileOpen: boolean;
   onClose: () => void;
   onSide: (side: Side) => void;
   onMode: (mode: TradeMode) => void;
@@ -196,13 +200,13 @@ function TradeTicket({
 
   return (
     <aside
-      className={`trade-ticket ${mobileOpen ? "trade-ticket--open" : ""}`}
-      role={mobileOpen ? "dialog" : "complementary"}
-      aria-modal={mobileOpen || undefined}
+      className="trade-ticket trade-ticket--open"
+      role="dialog"
+      aria-modal="true"
       aria-labelledby={`ticket-title-${market.id}`}
     >
       <span className="trade-sheet-grabber" aria-hidden="true" />
-      <div className="trade-ticket__mobile-head">
+      <div className="trade-ticket__head">
         <span>QUICK TICKET</span>
         <button onClick={onClose} aria-label="Close trade ticket">CLOSE ×</button>
       </div>
@@ -277,7 +281,7 @@ export function OvervaluedApp() {
   });
   const [sort, setSort] = useState<"ending" | "move" | "traded">("ending");
   const [query, setQuery] = useState("");
-  const [mobileTicket, setMobileTicket] = useState(false);
+  const [tradeOpen, setTradeOpen] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [rollIndex, setRollIndex] = useState(0);
@@ -326,10 +330,12 @@ export function OvervaluedApp() {
   }, [toast]);
 
   useEffect(() => {
-    if (!modal && !mobileTicket) return;
+    if (!modal && !tradeOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!previousFocus.current) {
+      previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     const dialog = document.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
     const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
     const focusable = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector)) : [];
@@ -338,7 +344,7 @@ export function OvervaluedApp() {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setModal(null);
-        setMobileTicket(false);
+        setTradeOpen(false);
         return;
       }
       if (event.key !== "Tab" || focusable.length === 0) return;
@@ -356,9 +362,13 @@ export function OvervaluedApp() {
     return () => {
       window.removeEventListener("keydown", closeOnEscape);
       document.body.style.overflow = previousOverflow;
-      previousFocus.current?.focus();
+      const returnTarget = previousFocus.current;
+      previousFocus.current = null;
+      window.requestAnimationFrame(() => {
+        if (returnTarget?.isConnected) returnTarget.focus();
+      });
     };
-  }, [modal, mobileTicket]);
+  }, [modal, tradeOpen]);
 
   const selected = markets.find((market) => market.id === selectedId) ?? markets[0];
   const position = positions[selected.id] ?? { YES: 0, NO: 0 };
@@ -374,12 +384,13 @@ export function OvervaluedApp() {
     });
   }, [markets, query, sort]);
 
-  function openTrade(market: Market, nextSide: Side) {
+  function openTrade(market: Market, nextSide: Side, trigger?: HTMLElement) {
+    previousFocus.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setSelectedId(market.id);
     setSide(nextSide);
     setMode("BUY");
     setShares(5);
-    setMobileTicket(true);
+    setTradeOpen(true);
   }
 
   function selectMarket(marketId: string) {
@@ -427,7 +438,7 @@ export function OvervaluedApp() {
     };
     setTape((current) => [trade, ...current].slice(0, 6));
     setToast(`FILLED · ${shares} ${side} @ ${price}¢ · ${selected.probability}¢ → ${nextProbability}¢`);
-    setMobileTicket(false);
+    setTradeOpen(false);
   }
 
   function rollResume() {
@@ -507,7 +518,7 @@ export function OvervaluedApp() {
                 market={market}
                 selected={market.id === selected.id}
                 onSelect={() => selectMarket(market.id)}
-                onTrade={(nextSide) => openTrade(market, nextSide)}
+                onTrade={(nextSide, trigger) => openTrade(market, nextSide, trigger)}
               />
             ))}
           </div>
@@ -534,11 +545,17 @@ export function OvervaluedApp() {
             </div>
           </div>
 
-          <div className={`mobile-stage-actions ${mobileTicket ? "mobile-stage-actions--hidden" : ""}`}>
-            <button className="mobile-yes" onClick={() => openTrade(selected, "YES")}>
+          <div className={`mobile-stage-actions ${tradeOpen ? "mobile-stage-actions--hidden" : ""}`}>
+            <button
+              className="mobile-yes"
+              onClick={(event) => openTrade(selected, "YES", event.currentTarget)}
+            >
               <span>BUY YES</span><strong>{selected.probability}¢</strong>
             </button>
-            <button className="mobile-no" onClick={() => openTrade(selected, "NO")}>
+            <button
+              className="mobile-no"
+              onClick={(event) => openTrade(selected, "NO", event.currentTarget)}
+            >
               <span>BUY NO</span><strong>{100 - selected.probability}¢</strong>
             </button>
           </div>
@@ -581,25 +598,33 @@ export function OvervaluedApp() {
           </section>
         </section>
 
-        <TradeTicket
-          market={selected}
-          side={side}
-          mode={mode}
-          shares={shares}
-          cash={cash}
-          position={position}
-          mobileOpen={mobileTicket}
-          onClose={() => setMobileTicket(false)}
-          onSide={setSide}
-          onMode={setMode}
-          onShares={setShares}
-          onSubmit={executeTrade}
-        />
       </section>
 
-      {mobileTicket && <button className="mobile-backdrop" aria-label="Close trade ticket" onClick={() => setMobileTicket(false)} />}
+      {tradeOpen && (
+        <div
+          className="trade-modal-layer"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTradeOpen(false);
+          }}
+        >
+          <TradeTicket
+            market={selected}
+            side={side}
+            mode={mode}
+            shares={shares}
+            cash={cash}
+            position={position}
+            onClose={() => setTradeOpen(false)}
+            onSide={setSide}
+            onMode={setMode}
+            onShares={setShares}
+            onSubmit={executeTrade}
+          />
+        </div>
+      )}
 
-      <nav className={`mobile-nav ${mobileTicket ? "mobile-nav--covered" : ""}`} aria-label="Mobile navigation">
+      <nav className={`mobile-nav ${tradeOpen ? "mobile-nav--covered" : ""}`} aria-label="Mobile navigation">
         <button className={modal === null ? "active" : ""} aria-current={modal === null ? "page" : undefined}><span aria-hidden="true">⌁</span>MARKETS</button>
         <button className={modal === "portfolio" ? "active" : ""} aria-current={modal === "portfolio" ? "page" : undefined} onClick={() => setModal("portfolio")}><span aria-hidden="true">$</span>PORTFOLIO</button>
         <button className={`mobile-list ${modal === "create" ? "active" : ""}`} aria-current={modal === "create" ? "page" : undefined} onClick={() => setModal("create")}><span aria-hidden="true">＋</span>LIST</button>
