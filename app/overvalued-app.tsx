@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import QRCode from "react-qr-code";
 import {
   formatCountdown,
   formatMoney,
@@ -15,8 +16,41 @@ import {
 
 type Side = "YES" | "NO";
 type TradeMode = "BUY" | "SELL";
-type Modal = "create" | "portfolio" | "rankings" | "resume" | null;
+type Modal = "create" | "portfolio" | "rankings" | "resume" | "referral" | null;
 type Position = { YES: number; NO: number };
+
+const REFERRAL_CODE = "MARGIN42";
+const REFERRAL_FALLBACK_ORIGIN = "https://overvalued.party";
+const noStoreSubscription = () => () => {};
+const getReferralOrigin = () => window.location.origin;
+const getReferralServerOrigin = () => REFERRAL_FALLBACK_ORIGIN;
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Booth previews can run on plain HTTP, so keep a legacy fallback.
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-1000px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+}
 
 const resumeExamples = [
   {
@@ -323,6 +357,12 @@ export function OvervaluedApp() {
   });
   const previousFocus = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
+  const referralOrigin = useSyncExternalStore(
+    noStoreSubscription,
+    getReferralOrigin,
+    getReferralServerOrigin,
+  );
+  const referralLink = `${referralOrigin}/?ref=${REFERRAL_CODE}`;
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -502,6 +542,29 @@ export function OvervaluedApp() {
     setModal(null);
     setToast("MARKET OPEN · Reference check closes in 15:00");
     setDraft({ title: "", askingTc: "$350K", claims: ["", "", ""], truth: "REAL" });
+  }
+
+  async function copyReferralLink() {
+    const copied = await copyText(referralLink);
+    setToast(copied ? "REFERRAL LINK COPIED" : "COULD NOT COPY · TRY AGAIN");
+  }
+
+  async function shareReferralLink() {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Overvalued",
+          text: "Every résumé is a prediction market. Join with my link and we both get $50 in game credit.",
+          url: referralLink,
+        });
+        setToast("REFERRAL INVITE SHARED");
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      }
+    }
+
+    await copyReferralLink();
   }
 
   return (
@@ -718,7 +781,56 @@ export function OvervaluedApp() {
             <div className="modal-head"><div><span>@MARGIN_GOBLIN</span><h2 id="portfolio-title">Portfolio</h2></div><button onClick={() => setModal(null)}>CLOSE ×</button></div>
             <div className="portfolio-summary"><div><span>AVAILABLE CASH</span><strong>{formatMoney(cash)}</strong></div><div><span>OPEN POSITIONS</span><strong>{Object.values(positions).reduce((sum, item) => sum + item.YES + item.NO, 0)}</strong></div><div><span>RANK</span><strong>#1</strong></div></div>
             <div className="position-table"><div className="table-head"><span>MARKET</span><span>POSITION</span><span>CURRENT</span><span>IF CORRECT</span></div>{Object.entries(positions).map(([marketId, item]) => { const market = markets.find((entry) => entry.id === marketId); if (!market || (!item.YES && !item.NO)) return null; const positionSide = item.YES ? "YES" : "NO"; const count = item.YES || item.NO; const currentPrice = positionSide === "YES" ? market.probability : 100 - market.probability; return <div className="position-row" key={marketId}><span><strong>{marketId}</strong><small>{market.title}</small></span><span className={positionSide === "YES" ? "yes-text" : "no-text"}>{count} {positionSide}</span><span>{currentPrice}¢</span><span>{formatMoney(count * 100)}</span></div>; })}</div>
-            <div className="referral-box"><div><span>REFERRAL CREDIT</span><strong>Invite a trader. You both receive $50.00.</strong></div><button onClick={() => { void navigator.clipboard?.writeText("https://overvalued.party/?ref=MARGIN42"); setToast("REFERRAL LINK COPIED"); }}>COPY LINK</button></div>
+            <section className="referral-box" aria-labelledby="referral-card-title">
+              <div className="referral-box__copy">
+                <div className="referral-box__eyebrow"><span>REFERRAL CREDIT</span><small>$50 EACH</small></div>
+                <h2 id="referral-card-title">Bring a trader. Split the upside.</h2>
+                <p>They open your invite, and both accounts get $50.00 in game credit.</p>
+              </div>
+              <div className="referral-link-row">
+                <div><span>YOUR INVITE</span><code>{referralLink}</code></div>
+                <button onClick={() => void copyReferralLink()}>COPY</button>
+              </div>
+              <div className="referral-actions">
+                <button className="referral-actions__primary" onClick={() => void shareReferralLink()}>SHARE INVITE</button>
+                <button aria-haspopup="dialog" aria-controls="referral-qr-dialog" onClick={() => setModal("referral")}>SHOW QR</button>
+              </div>
+              <div className="referral-box__foot"><span>ONE REWARD PER NEW TRADER</span><strong>CODE {REFERRAL_CODE}</strong></div>
+            </section>
+          </section>
+        </div>
+      )}
+
+      {modal === "referral" && (
+        <div className="modal-layer referral-qr-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setModal("portfolio")}>
+          <section id="referral-qr-dialog" className="referral-qr-modal" role="dialog" aria-modal="true" aria-labelledby="referral-qr-title" aria-describedby="referral-qr-description">
+            <span className="referral-qr-grabber" aria-hidden="true" />
+            <div className="modal-head">
+              <div><span>SCAN TO JOIN</span><h2 id="referral-qr-title">Put $50 on both books.</h2></div>
+              <button onClick={() => setModal("portfolio")}>BACK ×</button>
+            </div>
+            <div className="referral-qr-body">
+              <p id="referral-qr-description">Point a phone camera here. The invite opens Overvalued with your referral code already attached.</p>
+              <div className="referral-qr-frame">
+                <QRCode
+                  value={referralLink}
+                  size={256}
+                  level="M"
+                  bgColor="#f1efe6"
+                  fgColor="#080a0b"
+                  title={`Referral QR code for ${REFERRAL_CODE}`}
+                  viewBox="0 0 256 256"
+                  style={{ display: "block", height: "auto", width: "100%" }}
+                />
+              </div>
+              <div className="referral-qr-code"><strong>{REFERRAL_CODE}</strong><span>$50 FOR THEM · $50 FOR YOU</span></div>
+              <code className="referral-qr-link">{referralLink}</code>
+              <div className="referral-qr-actions">
+                <button className="referral-qr-actions__primary" onClick={() => void copyReferralLink()}>COPY LINK</button>
+                <button onClick={() => void shareReferralLink()}>SHARE INSTEAD</button>
+              </div>
+              <small className="referral-qr-note">ONE CREDIT PER NEW TRADER · GAME CREDITS HAVE NO CASH VALUE</small>
+            </div>
           </section>
         </div>
       )}

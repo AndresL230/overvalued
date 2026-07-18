@@ -54,10 +54,13 @@ test("ships the exchange, booth board, and bespoke social card", async () => {
   assert.match(app, /LIST YOURSELF/);
   assert.match(app, /VIEW RÉSUMÉ/);
   assert.match(app, /REDACTED TEST SAMPLE/);
+  assert.match(app, /SCAN TO JOIN/);
+  assert.match(app, /SHOW QR/);
   assert.doesNotMatch(app, /resume-dossier/);
   assert.match(board, /NEXT REFERENCE CHECK/);
   assert.match(board, /TRADE FROM YOUR PHONE/);
   assert.match(styles, /prefers-reduced-motion:\s*reduce/);
   assert.match(styles, /--yes:\s*#b7f34a/i);
+  assert.match(packageJson, /react-qr-code/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
