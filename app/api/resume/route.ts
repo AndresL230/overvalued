@@ -1,18 +1,21 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI, Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 
 // ============================================================================
 // The résumé desk. Generates ONE candidate card of insufferable LinkedIn-speak.
 //
-// Server-only: ANTHROPIC_API_KEY never reaches the browser. If the key is
-// absent or the call fails, this returns 503 and the client silently falls
-// back to the local wordlist generator — the booth keeps working with the
-// wifi down, which is the whole reason the wordlists still exist.
+// Server-only: GEMINI_API_KEY never reaches the browser. If the key is absent
+// or the call fails, this returns 503 and the client silently falls back to
+// the local wordlist generator — the booth keeps working with the wifi down,
+// which is the whole reason the wordlists still exist.
 // ============================================================================
 
 export const runtime = 'nodejs';
 // The card must differ every roll, so never cache this route.
 export const dynamic = 'force-dynamic';
+
+/** Overridable so a model rename doesn't require a code change at the booth. */
+const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
 
 const SYSTEM = `You are the résumé desk for "Overvalued," a satirical prediction market about
 LinkedIn/résumé inflation. Given a seed (a real résumé, a few rough notes, or
@@ -40,29 +43,30 @@ Rules:
   hint at legitimacy either way.`;
 
 /**
- * Structured outputs pin the response shape at the API layer, so a malformed
- * card can't reach the game. This replaces "return STRICT JSON only" prompting
- * and the JSON.parse guesswork that goes with it.
+ * Gemini's structured-output schema. Pinning the shape at the API layer means
+ * a malformed card can't reach the game — this replaces "return STRICT JSON
+ * only" prompting and the JSON.parse guesswork that goes with it.
  */
 const CARD_SCHEMA = {
-  type: 'object',
+  type: Type.OBJECT,
   properties: {
-    ticker: { type: 'string', description: '3-5 uppercase letters, no $' },
-    title: { type: 'string', description: 'An inflated job title' },
+    ticker: { type: Type.STRING, description: '3-5 uppercase letters, no $' },
+    title: { type: Type.STRING, description: 'An inflated job title' },
     bullets: {
-      type: 'array',
+      type: Type.ARRAY,
       description: 'Exactly 3 delusional accomplishments, each under 12 words',
-      items: { type: 'string' },
+      items: { type: Type.STRING },
     },
     asking_tc: {
-      type: 'integer',
+      type: Type.INTEGER,
       description: 'Asking total comp in whole dollars, 180000-950000',
     },
-    tagline: { type: 'string', description: 'One line, max 8 words' },
+    tagline: { type: Type.STRING, description: 'One line, max 8 words' },
   },
   required: ['ticker', 'title', 'bullets', 'asking_tc', 'tagline'],
-  additionalProperties: false,
-} as const;
+  // Gemini honours declaration order when generating; keep it stable.
+  propertyOrdering: ['ticker', 'title', 'bullets', 'asking_tc', 'tagline'],
+};
 
 export interface ResumeCard {
   ticker: string;
@@ -94,9 +98,10 @@ function sanitize(card: ResumeCard): ResumeCard {
 }
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
     return NextResponse.json(
-      { error: 'no_api_key', detail: 'ANTHROPIC_API_KEY is not set' },
+      { error: 'no_api_key', detail: 'GEMINI_API_KEY is not set' },
       { status: 503 },
     );
   }
@@ -110,36 +115,30 @@ export async function POST(req: Request) {
   }
 
   try {
-    const client = new Anthropic();
-    const response = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 1024,
-      system: SYSTEM,
-      // A booth visitor is holding a phone waiting for the dice to land, so
-      // this is tuned for latency: low effort, no thinking. The task is short
-      // and well-specified enough not to need either.
-      output_config: {
-        effort: 'low',
-        format: { type: 'json_schema', schema: CARD_SCHEMA },
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: `Seed: ${seed || '(empty)'}\nGenerate one candidate card.`,
+      config: {
+        systemInstruction: SYSTEM,
+        responseMimeType: 'application/json',
+        responseSchema: CARD_SCHEMA,
+        maxOutputTokens: 1024,
+        // A booth visitor is holding a phone waiting for the dice to land, so
+        // this is tuned for latency: thinking off. The task is short and
+        // well-specified enough not to need it.
+        thinkingConfig: { thinkingBudget: 0 },
+        // The dice must feel different every roll.
+        temperature: 1.1,
       },
-      messages: [
-        {
-          role: 'user',
-          content: `Seed: ${seed || '(empty)'}\nGenerate one candidate card.`,
-        },
-      ],
     });
 
-    if (response.stop_reason === 'refusal') {
-      return NextResponse.json({ error: 'refused' }, { status: 503 });
-    }
-
-    const text = response.content.find((b) => b.type === 'text');
-    if (!text || text.type !== 'text') {
+    const text = response.text;
+    if (!text) {
       return NextResponse.json({ error: 'empty_response' }, { status: 503 });
     }
 
-    const card = sanitize(JSON.parse(text.text) as ResumeCard);
+    const card = sanitize(JSON.parse(text) as ResumeCard);
     if (!card.title || card.bullets.length === 0) {
       return NextResponse.json({ error: 'incomplete_card' }, { status: 503 });
     }

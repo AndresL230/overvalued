@@ -94,13 +94,18 @@ delusional bullets, asking TC, and a tagline — via `POST /api/resume`.
 
 ```bash
 # .env.local — server-side only, never NEXT_PUBLIC_
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+# optional: override if the model name changes
+# GEMINI_MODEL=gemini-2.5-flash
 ```
 
-- Model: `claude-opus-4-8`, `effort: low`, no extended thinking. A booth
-  visitor is holding a phone waiting for the dice to land, so this is tuned
-  for latency, not depth.
-- The JSON shape is pinned with **structured outputs** (`output_config.format`),
+Get a key at <https://aistudio.google.com/apikey>. Restart `npm run dev` after
+adding it — Next only reads `.env.local` at boot.
+
+- Model: `gemini-2.5-flash` with `thinkingBudget: 0`. A booth visitor is
+  holding a phone waiting for the dice to land, so this is tuned for latency,
+  not depth.
+- The JSON shape is pinned with a **`responseSchema`** (structured output),
   not by asking the model to "return strict JSON" — a malformed card can't
   reach the game.
 - `asking_tc` is clamped and rounded server-side so money stays on the integer
@@ -109,7 +114,7 @@ ANTHROPIC_API_KEY=sk-ant-...
   seed is impressive or empty, so the card never hints at whether the résumé
   is real. That's what keeps the market honest.
 
-**No key required.** Without `ANTHROPIC_API_KEY` the route returns 503 and the
+**No key required.** Without `GEMINI_API_KEY` the route returns 503 and the
 client silently falls back to the local wordlist generator
 (`components/create/wordlists.ts`), showing "résumé desk offline". Same on
 network failure or a >9s timeout. The game still runs with the wifi down —
