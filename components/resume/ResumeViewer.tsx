@@ -4,6 +4,12 @@ import Image from 'next/image';
 import { useEffect, useRef } from 'react';
 import type { MarketPublic } from '@/lib/types';
 
+// ---------------------------------------------------------------------------
+// The submitted résumé, on exchange chrome: `.resume-modal` is a four-row grid
+// (head / meta / canvas / note) already sized and made full-bleed below 820px
+// by the stylesheet, so the markup here is only those four children in order.
+// ---------------------------------------------------------------------------
+
 const resumeExamples = [
   {
     id: 'SWE-INT-02',
@@ -92,14 +98,13 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-stretch justify-center sm:items-center sm:p-6">
-      <button
-        type="button"
-        aria-label="Close résumé"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-      />
-
+    <div
+      className="modal-layer"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         id="resume-viewer"
         ref={dialogRef}
@@ -107,62 +112,41 @@ export function ResumeViewer({ market, onClose }: ResumeViewerProps) {
         aria-modal="true"
         aria-labelledby="resume-viewer-title"
         aria-describedby="resume-viewer-note"
-        className="relative grid h-dvh w-full grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden bg-surface shadow-[0_24px_90px_rgba(0,0,0,0.85)] sm:h-[92dvh] sm:max-h-[1020px] sm:max-w-4xl sm:rounded-3xl sm:border sm:border-line"
+        className="resume-modal"
       >
-        <header className="flex min-h-16 items-center justify-between gap-4 border-b border-line bg-surface px-4 sm:px-5">
-          <div className="min-w-0">
-            <p className="truncate text-[10px] font-bold tracking-[0.15em] text-gold uppercase">
-              Submitted material · {market.id.slice(0, 8)}
-            </p>
-            <h2 id="resume-viewer-title" className="mt-1 text-xl leading-none font-black text-fg">
-              Résumé
-            </h2>
+        <div className="modal-head">
+          <div>
+            <span>SUBMITTED MATERIAL · {market.id.slice(0, 8).toUpperCase()}</span>
+            <h2 id="resume-viewer-title">Résumé</h2>
           </div>
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            className="flex min-h-11 items-center rounded-xl px-3 text-[11px] font-extrabold tracking-[0.1em] text-muted uppercase transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-          >
-            Close ×
+          <button ref={closeRef} type="button" onClick={onClose}>
+            CLOSE ×
           </button>
-        </header>
+        </div>
 
-        <div className="flex min-h-14 items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 sm:px-5">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold tracking-[0.08em] text-fg uppercase">
-              Software engineer · intern
-            </p>
-            <p className="mt-1 text-[9px] tracking-[0.1em] text-muted uppercase">
-              {resume.id} · redacted test sample
-            </p>
+        <div className="resume-modal__meta">
+          <div>
+            <span>SOFTWARE ENGINEER · INTERN</span>
+            <small>{resume.id} · REDACTED TEST SAMPLE</small>
           </div>
-          <a
-            href={resume.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-h-11 shrink-0 items-center rounded-xl border border-line px-3 text-[10px] font-extrabold tracking-[0.1em] text-gold uppercase transition-colors hover:border-gold/50 hover:bg-gold/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-          >
-            Source ↗
+          <a href={resume.sourceUrl} target="_blank" rel="noreferrer">
+            SOURCE ↗
           </a>
         </div>
 
-        <div className="min-h-0 overflow-y-auto overscroll-contain bg-ink p-3 sm:p-6">
+        <div className="resume-viewer-canvas">
           <Image
             src={resume.assetUrl}
             width={resume.width}
             height={resume.height}
             sizes="(max-width: 640px) calc(100vw - 24px), 760px"
             alt="Redacted software engineering intern résumé test sample"
-            className="mx-auto h-auto w-full max-w-[760px] bg-white shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
           />
         </div>
 
-        <p
-          id="resume-viewer-note"
-          className="border-t border-line bg-surface px-4 py-2.5 text-[9px] leading-relaxed text-muted sm:px-5"
-        >
-          Test asset from the public resumes.fyi catalogue. It is not the identity of this fictional market.
+        <p id="resume-viewer-note" className="resume-sample-note">
+          Test asset from the public resumes.fyi catalogue. It is not the identity of
+          this fictional market.
         </p>
       </section>
     </div>

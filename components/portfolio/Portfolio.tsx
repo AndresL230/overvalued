@@ -96,8 +96,11 @@ export function Portfolio({
     return { openMarkCents: mark, unrealizedCents: pnl };
   }, [positions, trades, markets]);
 
+  // No wrapper: `.portfolio-summary` and `.position-table` are written to sit
+  // directly under `.modal-head` inside `.panel-modal`, and each carries its
+  // own hairline divider and 18px gutter.
   return (
-    <div className={`flex flex-col gap-4 ${className}`}>
+    <div className={className}>
       <CashHeader
         player={player}
         openMarkCents={openMarkCents}
@@ -105,7 +108,7 @@ export function Portfolio({
       />
 
       {error && (
-        <p className="rounded-lg border border-no/40 bg-no/10 px-3 py-2 text-xs text-no">
+        <p className="empty-activity no-text">
           Couldn&apos;t load your positions. {error}
         </p>
       )}

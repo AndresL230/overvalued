@@ -130,103 +130,46 @@ export function PositionRow({
   const remaining = msUntil(market.expires_at);
   const settling = remaining <= 0 || market.status === 'resolved';
   const urgent = !settling && remaining < 60_000;
+  const clock = settling ? 'CHECKING' : fmtCountdown(remaining);
 
-  const totalPnl = legs.reduce((s, l) => s + l.pnlCents, 0);
-
+  // One `.position-row` per leg rather than a card per market: the side is the
+  // thing you actually hold, and the table's 4-column grid reads straight down.
   return (
-    <article
-      className={`rounded-xl border border-line bg-surface p-3 ${className}`}
-      aria-label={market.title}
-    >
-      <header className="flex items-start gap-3">
-        <h3 className="min-w-0 flex-1 text-sm font-semibold leading-snug text-fg">
-          {market.title}
-        </h3>
-        <span
-          className={`tnum shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold ${
-            settling
-              ? 'bg-hot/15 text-hot pulse-urgent'
-              : urgent
-                ? 'bg-hot/15 text-hot pulse-urgent'
-                : 'bg-surface-2 text-muted'
-          }`}
-          title={settling ? 'Reference check in progress' : 'Time to reference check'}
-        >
-          {settling ? 'CHECKING' : fmtCountdown(remaining)}
-        </span>
-      </header>
-
-      <div className="mt-2 flex flex-col gap-2">
-        {legs.map((leg) => {
-          const win = leg.pnlCents > 0;
-          const flat = leg.pnlCents === 0;
-          const tone = flat ? 'text-muted' : win ? 'text-yes' : 'text-no';
-          const yes = leg.side === 'yes';
-          return (
-            <div key={leg.side} className="rounded-lg bg-surface-2 px-2.5 py-2">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`tnum rounded px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
-                    yes ? 'bg-yes/15 text-yes' : 'bg-no/15 text-no'
-                  }`}
-                >
-                  {leg.side}
-                </span>
-                <span className="tnum text-sm text-fg">
-                  {leg.shares} <span className="text-muted">shares</span>
-                </span>
-                <span className={`tnum ml-auto text-sm font-semibold ${tone}`}>
-                  {flat ? '' : win ? '+' : '−'}
-                  {fmtCents(Math.abs(leg.pnlCents))}
-                </span>
-              </div>
-
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
-                <span className="tnum">
-                  avg <span className="text-fg">{leg.avgEntryCents}¢</span>
-                </span>
-                <span aria-hidden className="text-line">
-                  ·
-                </span>
-                <span className="tnum">
-                  mark <span className="text-fg">{leg.markPriceCents}¢</span>
-                </span>
-                <span aria-hidden className="text-line">
-                  ·
-                </span>
-                <span className="tnum">
-                  cost <span className="text-fg">{fmtCents(leg.basisCents)}</span>
-                </span>
-              </div>
-
-              <div className="tnum mt-1 text-[11px] text-muted">
-                If this resolves your way:{' '}
-                <span className="font-semibold text-gold">
-                  +{fmtCents(Math.max(0, leg.gainIfRightCents))}
-                </span>{' '}
-                <span className="opacity-70">
-                  ({fmtCents(leg.payoutIfRightCents)} payout)
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {legs.length > 1 && (
-        <footer className="mt-2 flex items-center justify-between border-t border-line pt-2 text-[11px]">
-          <span className="text-muted">Position total</span>
-          <span
-            className={`tnum font-semibold ${
-              totalPnl === 0 ? 'text-muted' : totalPnl > 0 ? 'text-yes' : 'text-no'
-            }`}
+    <>
+      {legs.map((leg) => {
+        const flat = leg.pnlCents === 0;
+        const tone = flat ? '' : leg.pnlCents > 0 ? 'positive' : 'negative';
+        return (
+          <div
+            key={leg.side}
+            className={`position-row ${className}`}
+            aria-label={`${market.title}, ${leg.side}`}
           >
-            {totalPnl === 0 ? '' : totalPnl > 0 ? '+' : '−'}
-            {fmtCents(Math.abs(totalPnl))}
-          </span>
-        </footer>
-      )}
-    </article>
+            <span>
+              {market.title}
+              <small>
+                <b className={leg.side === 'yes' ? 'yes-text' : 'no-text'}>
+                  {leg.side.toUpperCase()}
+                </b>{' '}
+                · {leg.shares} SH · AVG {leg.avgEntryCents}¢ ·{' '}
+                <b className={settling || urgent ? 'closing-soon' : ''}>{clock}</b>
+              </small>
+            </span>
+
+            <span className="tnum">{leg.markPriceCents}¢</span>
+
+            <span className={`tnum ${tone}`}>
+              {flat ? '' : leg.pnlCents > 0 ? '+' : '−'}
+              {fmtCents(Math.abs(leg.pnlCents))}
+            </span>
+
+            <span className="tnum">
+              +{fmtCents(Math.max(0, leg.gainIfRightCents))}
+            </span>
+          </div>
+        );
+      })}
+    </>
   );
 }
 

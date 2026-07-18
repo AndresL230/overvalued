@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { STARTING_CASH, fmtCents, type Player } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
-// The money headline. Big gold number + the journey from $100.
+// The money headline, as the exchange's `.portfolio-summary` strip: three
+// hairline-divided cells under the modal head. The stylesheet drops to two
+// columns below 820px and hides the last cell, so unrealized P&L goes there —
+// it is the one number every position row repeats anyway.
 // ---------------------------------------------------------------------------
 
 function prefersReducedMotion(): boolean {
@@ -82,56 +85,31 @@ export function CashHeader({
   const up = delta >= 0;
   const pct = (delta / STARTING_CASH) * 100;
   const pctLabel = `${up ? '+' : ''}${pct.toFixed(1)}%`;
-  const deltaTone = delta === 0 ? 'text-muted' : up ? 'text-yes' : 'text-no';
+
+  const unrealized = unrealizedCents ?? 0;
+  const unrealizedTone =
+    unrealized === 0 ? '' : unrealized > 0 ? 'positive' : 'negative';
 
   return (
-    <section
-      className={`rounded-2xl border border-line bg-surface p-4 ${className}`}
-      aria-label="Your cash"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-          Cash on hand
-        </span>
-        <span className="truncate text-xs text-muted">@{player.handle}</span>
+    <div className={`portfolio-summary ${className}`} aria-label="Your cash">
+      <div ref={flashRef}>
+        <span>CASH ON HAND · {pctLabel}</span>
+        <strong className="tnum">{fmtCents(shown)}</strong>
       </div>
 
-      <div ref={flashRef} className="mt-1 -mx-1 rounded-lg px-1">
-        <div className="tnum text-gold text-5xl font-bold leading-none tracking-tight tabular-nums">
-          {fmtCents(shown)}
-        </div>
+      <div>
+        <span>ON THE TABLE</span>
+        <strong className="tnum">{fmtCents(openMarkCents ?? 0)}</strong>
       </div>
 
-      {/* the journey from $100 */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <span className="tnum text-muted">{fmtCents(STARTING_CASH)}</span>
-        <span aria-hidden className="text-line">→</span>
-        <span className="tnum text-fg">{fmtCents(cash)}</span>
-        <span
-          className={`tnum ml-auto rounded-md px-2 py-0.5 text-sm font-semibold ${deltaTone} ${
-            delta === 0 ? 'bg-surface-2' : up ? 'bg-yes/10' : 'bg-no/10'
-          }`}
-        >
-          {up ? '+' : '−'}
-          {fmtCents(Math.abs(delta))} <span className="opacity-70">{pctLabel}</span>
-        </span>
+      <div>
+        <span>UNREALIZED</span>
+        <strong className={`tnum ${unrealizedTone}`}>
+          {unrealized === 0 ? '' : unrealized > 0 ? '+' : '−'}
+          {fmtCents(Math.abs(unrealized))}
+        </strong>
       </div>
-
-      {typeof openMarkCents === 'number' && openMarkCents > 0 && (
-        <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs">
-          <span className="text-muted">On the table</span>
-          <span className="tnum text-fg">
-            {fmtCents(openMarkCents)}
-            {typeof unrealizedCents === 'number' && unrealizedCents !== 0 && (
-              <span className={unrealizedCents > 0 ? 'text-yes ml-2' : 'text-no ml-2'}>
-                {unrealizedCents > 0 ? '+' : '−'}
-                {fmtCents(Math.abs(unrealizedCents))}
-              </span>
-            )}
-          </span>
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
 

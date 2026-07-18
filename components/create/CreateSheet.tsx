@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fmtTC } from '@/lib/types';
-import { generateResumeCard } from '@/lib/resume-card';
+import { generateResumeCard, type ResumeCard } from '@/lib/resume-card';
 import { RandomizeButton } from './RandomizeButton';
 import { RealLarpToggle } from './RealLarpToggle';
 import { parseAskingTc, type Resume } from './wordlists';
@@ -64,6 +64,19 @@ function CreateSheetForm({
   const [ticker, setTicker] = useState('');
   const [tagline, setTagline] = useState('');
   const [offline, setOffline] = useState(false);
+  // --- Résumé upload wiring -------------------------------------------------
+  // Handlers only; no markup. To surface this in the redesigned sheet, render
+  // a file input and call rollFromFile(file):
+  //
+  //   import { ACCEPTED_UPLOAD } from '@/lib/resume-card';
+  //   <input type="file" accept={ACCEPTED_UPLOAD}
+  //          onChange={e => { const f = e.target.files?.[0];
+  //                           if (f) void rollFromFile(f); e.target.value = ''; }} />
+  //
+  // `busyUpload` drives the pending state, `uploadError` carries a
+  // player-readable message for a rejected file (wrong type / too big).
+  const [busyUpload, setBusyUpload] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -114,17 +127,47 @@ function CreateSheetForm({
 
   // Model-backed roll. generateResumeCard never rejects — it degrades to the
   // local wordlists — so the dice always lands.
+  const applyCard = useCallback(
+    (card: ResumeCard) => {
+      applyRoll({
+        title: card.title,
+        bullets: card.bullets,
+        askingTc: card.asking_tc,
+      });
+      setTicker(card.ticker);
+      setTagline(card.tagline);
+      setOffline(card.offline);
+      setUploadError(
+        card.rejected === 'unsupported_file_type'
+          ? "Can't read that one — export it as a PDF and try again."
+          : card.rejected === 'file_too_large'
+            ? 'That file is over 8MB. Try a smaller PDF.'
+            : null,
+      );
+    },
+    [applyRoll],
+  );
+
   const rollFromDesk = useCallback(async () => {
-    const card = await generateResumeCard();
-    applyRoll({
-      title: card.title,
-      bullets: card.bullets,
-      askingTc: card.asking_tc,
-    });
-    setTicker(card.ticker);
-    setTagline(card.tagline);
-    setOffline(card.offline);
-  }, [applyRoll]);
+    applyCard(await generateResumeCard());
+  }, [applyCard]);
+
+  /** Upload path: parody the author's actual résumé rather than inventing one. */
+  const rollFromFile = useCallback(
+    async (file: File) => {
+      setBusyUpload(true);
+      try {
+        const card = await generateResumeCard(file);
+        applyCard(card);
+        // An uploaded résumé IS yours, so don't presume it's a LARP the way a
+        // fully invented roll does — let the author declare the truth.
+        if (!card.offline) setIsReal(null);
+      } finally {
+        setBusyUpload(false);
+      }
+    },
+    [applyCard],
+  );
 
   const setBulletAt = useCallback((i: number, v: string) => {
     setBullets((cur) => cur.map((b, j) => (j === i ? v : b)));

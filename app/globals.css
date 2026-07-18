@@ -1382,6 +1382,24 @@ textarea:focus-visible {
   letter-spacing: .08em;
 }
 
+.referral-qr {
+  width: min(420px, 100%);
+}
+
+.referral-qr__body {
+  padding: 18px 0 4px;
+}
+
+/* Paper stock, not a gold-framed placard — the QR is a résumé-world artifact. */
+.referral-qr__code {
+  width: min(272px, calc(100% - 36px));
+  margin: 4px auto 18px;
+  padding: 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
 .resume-viewer-canvas {
   min-height: 0;
   overflow: auto;
@@ -1776,6 +1794,11 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+/* The empty/loading position table has no rows to set its own rhythm. */
+.position-table__cta {
+  padding: 0 0 18px;
+}
+
 .referral-box {
   margin: 10px 18px 18px;
   padding: 15px;
@@ -1789,8 +1812,17 @@ textarea:focus-visible {
 }
 
 .referral-box > div {
+  min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* An invite link on a real domain is longer than the box. Clip it — the copy
+   button is what actually moves the link, not reading it off the screen. */
+.referral-box strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .referral-box span {
@@ -1815,8 +1847,18 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
+/* Gutter for the shared `.sort-tabs` control, which is written for the flush
+   edges of the market queue rather than a padded panel. */
+.leaderboard-tabs {
+  padding: 0 18px;
+}
+
 .leaderboard-table {
   padding: 0 18px;
+}
+
+.leaderboard-table .bot {
+  opacity: .45;
 }
 
 .leaderboard-table > div {

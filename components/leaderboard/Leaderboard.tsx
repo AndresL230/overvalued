@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
+  STARTING_CASH,
   fmtBps,
   fmtCents,
   fmtTC,
@@ -24,25 +25,25 @@ export interface LeaderboardProps {
 
 type Tab = 'cash' | 'overvalued' | 'hire';
 
+// Labels are set in the `.sort-tabs` idiom: three equal mono tabs, underlined
+// in lime when active. Same control the market queue uses.
 const TABS: { id: Tab; label: string; blurb: string }[] = [
   {
     id: 'cash',
-    label: 'Fattest Portfolio',
-    blurb: 'Who read the room best',
+    label: 'TRADERS',
+    blurb: 'WHO READ THE ROOM BEST',
   },
   {
     id: 'overvalued',
-    label: 'Most Overvalued',
-    blurb: 'Résumés the crowd fell for — and they were fake',
+    label: 'OVERVALUED',
+    blurb: 'RÉSUMÉS THE CROWD FELL FOR — AND THEY WERE FAKE',
   },
   {
     id: 'hire',
-    label: 'Actually Hire This Person',
-    blurb: 'Real candidates the crowd correctly spotted',
+    label: 'HIRE THEM',
+    blurb: 'REAL CANDIDATES THE CROWD CORRECTLY SPOTTED',
   },
 ];
-
-const MEDALS = ['1', '2', '3'];
 
 export function Leaderboard({
   players,
@@ -79,70 +80,53 @@ export function Leaderboard({
     [resolved],
   );
 
+  const active = TABS.find((t) => t.id === tab);
+  const count =
+    tab === 'cash' ? byCash.length : tab === 'overvalued' ? overvalued.length : hire.length;
+
+  // The enclosing `.panel-modal` already carries the head and the "Best traders"
+  // title, so this renders only the tabs and the board itself.
   return (
-    <section className="rounded-xl border border-line bg-surface">
-      <header className="border-b border-line px-4 pt-4 pb-3">
-        <h2 className="text-[11px] font-black tracking-[0.34em] text-gold uppercase">
-          Leaderboard
-        </h2>
-
-        <div
-          role="tablist"
-          aria-label="Leaderboard views"
-          className="mt-3 flex flex-wrap gap-1.5"
-        >
-          {TABS.map((t) => {
-            const on = t.id === tab;
-            return (
-              <button
-                key={t.id}
-                role="tab"
-                aria-selected={on}
-                onClick={() => setTab(t.id)}
-                className={[
-                  'rounded-md px-2.5 py-1.5 text-[10px] font-bold tracking-[0.14em] uppercase transition-colors',
-                  on
-                    ? 'bg-surface-2 text-fg ring-1 ring-gold/50'
-                    : 'text-muted hover:bg-surface-2 hover:text-fg',
-                ].join(' ')}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+    <>
+      <div className="leaderboard-tabs">
+        <div className="sort-tabs" role="tablist" aria-label="Leaderboard views">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={t.id === tab}
+              className={t.id === tab ? 'active' : ''}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
-
-        <p className="mt-2 text-[10px] tracking-[0.12em] text-muted uppercase">
-          {TABS.find((t) => t.id === tab)?.blurb}
-        </p>
-      </header>
-
-      <div className="p-2">
-        {tab === 'cash' && (
-          <CashBoard rows={byCash} currentPlayerId={currentPlayerId} />
-        )}
-        {tab === 'overvalued' && (
-          <MarketBoard
-            rows={overvalued}
-            tone="no"
-            emptyLabel="No LARPs have resolved yet."
-            captionFor={(m) =>
-              `Crowd said ${fmtBps(m.prob_yes_bps)} REAL — it was fake`
-            }
-          />
-        )}
-        {tab === 'hire' && (
-          <MarketBoard
-            rows={hire}
-            tone="yes"
-            emptyLabel="No real candidates have resolved yet."
-            captionFor={(m) =>
-              `Crowd said ${fmtBps(m.prob_yes_bps)} REAL — correct`
-            }
-          />
-        )}
       </div>
-    </section>
+
+      <div className="section-heading">
+        <span>{active?.blurb}</span>
+        <span className="tnum">{count}</span>
+      </div>
+
+      {tab === 'cash' && <CashBoard rows={byCash} currentPlayerId={currentPlayerId} />}
+      {tab === 'overvalued' && (
+        <AwardBoard
+          rows={overvalued}
+          tone="no"
+          emptyLabel="No LARPs have resolved yet."
+          captionFor={(m) => `Crowd said ${fmtBps(m.prob_yes_bps)} real — it was fake`}
+        />
+      )}
+      {tab === 'hire' && (
+        <AwardBoard
+          rows={hire}
+          tone="yes"
+          emptyLabel="No real candidates have resolved yet."
+          captionFor={(m) => `Crowd said ${fmtBps(m.prob_yes_bps)} real — correct`}
+        />
+      )}
+    </>
   );
 }
 
@@ -155,67 +139,41 @@ function CashBoard({
   rows: LeaderboardPlayer[];
   currentPlayerId: string;
 }) {
-  if (rows.length === 0) return <Empty label="No players yet." />;
+  if (rows.length === 0) return <p className="empty-activity">No players yet.</p>;
 
   return (
-    <ol className="flex flex-col gap-1">
+    <div className="leaderboard-table">
       {rows.map((p, i) => {
         const isMe = p.id === currentPlayerId;
         const isBot = p.is_bot === true;
-        const medal = i < 3 ? MEDALS[i] : null;
+        const delta = p.cash - STARTING_CASH;
 
         return (
-          <li
+          <div
             key={p.id}
-            className={[
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
-              isMe
-                ? 'bg-surface-2 ring-1 ring-gold/60'
-                : 'hover:bg-surface-2/60',
-              // bots stay on the board but must not out-read humans
-              isBot && !isMe ? 'opacity-45' : '',
-            ].join(' ')}
+            // `.leader` is the stylesheet's lime highlight; bots stay on the
+            // board but dimmed, so they never read as beating a human.
+            className={[isMe ? 'leader' : '', isBot ? 'bot' : ''].join(' ').trim()}
           >
-            <span
-              className={[
-                'tnum w-7 shrink-0 text-center text-sm font-black',
-                medal ? 'text-gold' : 'text-muted',
-              ].join(' ')}
-              aria-label={`Rank ${i + 1}`}
-            >
-              {medal ?? i + 1}
-            </span>
-
-            <span className="min-w-0 flex-1 truncate text-sm font-bold text-fg">
+            <span aria-label={`Rank ${i + 1}`}>{i + 1}</span>
+            <span>
               {p.handle}
-              {isMe && (
-                <span className="ml-2 rounded bg-gold/20 px-1.5 py-0.5 text-[9px] font-black tracking-[0.16em] text-gold uppercase">
-                  You
-                </span>
-              )}
-              {isBot && (
-                <span className="ml-2 text-[9px] font-bold tracking-[0.16em] text-muted uppercase">
-                  Bot
-                </span>
-              )}
+              {isMe && ' · YOU'}
+              {isBot && ' · BOT'}
             </span>
-
-            <span
-              className={[
-                'tnum shrink-0 text-base font-black',
-                i < 3 ? 'text-gold' : 'text-fg',
-              ].join(' ')}
-            >
-              {fmtCents(p.cash)}
-            </span>
-          </li>
+            <span className="tnum">{fmtCents(p.cash)}</span>
+            <small className={delta < 0 ? 'negative' : undefined}>
+              {delta >= 0 ? '+' : '−'}
+              {fmtCents(Math.abs(delta))}
+            </small>
+          </div>
         );
       })}
-    </ol>
+    </div>
   );
 }
 
-function MarketBoard({
+function AwardBoard({
   rows,
   tone,
   emptyLabel,
@@ -226,61 +184,23 @@ function MarketBoard({
   emptyLabel: string;
   captionFor: (m: MarketPublic) => string;
 }) {
-  if (rows.length === 0) return <Empty label={emptyLabel} />;
-
-  const accent = tone === 'yes' ? 'text-yes' : 'text-no';
-  const stampBorder = tone === 'yes' ? 'border-yes/50' : 'border-no/50';
+  if (rows.length === 0) return <p className="empty-activity">{emptyLabel}</p>;
 
   return (
-    <ol className="flex flex-col gap-1">
-      {rows.map((m, i) => (
-        <li
-          key={m.id}
-          className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-surface-2/60"
-        >
-          <span
-            className={[
-              'tnum w-7 shrink-0 text-center text-sm font-black',
-              i < 3 ? 'text-gold' : 'text-muted',
-            ].join(' ')}
-          >
-            {i < 3 ? MEDALS[i] : i + 1}
+    <div className="award-grid">
+      {rows.map((m) => (
+        <article key={m.id}>
+          <span>
+            <b className={tone === 'yes' ? 'yes-text' : 'no-text'}>
+              {tone === 'yes' ? 'REAL' : 'LARP'}
+            </b>{' '}
+            · {fmtBps(m.prob_yes_bps)} · {fmtTC(m.asking_tc)}
           </span>
-
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold text-fg">
-              {m.title}
-            </span>
-            <span className="tnum mt-0.5 block truncate text-[10px] tracking-[0.1em] text-muted uppercase">
-              {fmtTC(m.asking_tc)} · {captionFor(m)}
-            </span>
-          </span>
-
-          <span className="flex shrink-0 flex-col items-end gap-1">
-            <span className={`tnum text-base font-black ${accent}`}>
-              {fmtBps(m.prob_yes_bps)}
-            </span>
-            <span
-              className={[
-                'border px-1.5 text-[9px] font-black tracking-[0.16em] uppercase',
-                stampBorder,
-                accent,
-              ].join(' ')}
-            >
-              {tone === 'yes' ? 'Real' : 'Larp'}
-            </span>
-          </span>
-        </li>
+          <strong>{m.title}</strong>
+          <p>{captionFor(m)}</p>
+        </article>
       ))}
-    </ol>
-  );
-}
-
-function Empty({ label }: { label: string }) {
-  return (
-    <p className="px-3 py-10 text-center text-[11px] tracking-[0.16em] text-muted uppercase">
-      {label}
-    </p>
+    </div>
   );
 }
 

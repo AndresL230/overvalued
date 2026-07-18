@@ -57,58 +57,51 @@ export function PositionsList({
       );
   }, [positions, markets]);
 
-  return (
-    <section className={className} aria-label="Open positions">
-      <div className="mb-2 flex items-baseline justify-between px-1">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-          Open positions
-        </h2>
-        {rows.length > 0 && (
-          <span className="tnum text-[11px] text-muted">{rows.length}</span>
+  if (loading && rows.length === 0) {
+    return (
+      <div className={`position-table ${className}`} aria-busy="true">
+        <p className="empty-activity">Loading your positions…</p>
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className={`position-table ${className}`}>
+        <p className="empty-activity">
+          You own nothing. Cash sitting still never called anyone&apos;s bluff — find
+          a candidate who smells fake and take the other side.
+        </p>
+        {onGoTrade && (
+          <div className="position-table__cta">
+            <button type="button" className="list-button" onClick={onGoTrade}>
+              GO FIND A MARKET
+            </button>
+          </div>
         )}
       </div>
+    );
+  }
 
-      {loading && rows.length === 0 ? (
-        <div className="flex flex-col gap-2" aria-busy="true">
-          {[0, 1].map((i) => (
-            <div
-              key={i}
-              className="h-24 animate-pulse rounded-xl border border-line bg-surface"
-            />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center">
-          <p className="text-base font-semibold text-fg">You own nothing.</p>
-          <p className="mt-0.5 text-base font-semibold text-muted">Bold strategy.</p>
-          <p className="mx-auto mt-3 max-w-[34ch] text-xs leading-relaxed text-muted">
-            Cash sitting still never called anyone&apos;s bluff. Find a startup that
-            smells fake and take the other side.
-          </p>
-          {onGoTrade && (
-            <button
-              type="button"
-              onClick={onGoTrade}
-              className="mt-4 min-h-11 w-full rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-ink transition active:scale-[0.98]"
-            >
-              Go find a market
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {rows.map(({ position, market }) => (
-            <PositionRow
-              key={`${position.player_id}:${position.market_id}`}
-              position={position}
-              market={market}
-              trades={trades}
-              nowMs={now}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+  return (
+    <div className={`position-table ${className}`} aria-label="Open positions">
+      <div className="table-head">
+        <span>MARKET</span>
+        <span>MARK</span>
+        <span>P&amp;L</span>
+        <span>TO WIN</span>
+      </div>
+
+      {rows.map(({ position, market }) => (
+        <PositionRow
+          key={`${position.player_id}:${position.market_id}`}
+          position={position}
+          market={market}
+          trades={trades}
+          nowMs={now}
+        />
+      ))}
+    </div>
   );
 }
 
