@@ -201,6 +201,7 @@ function TradeTicket({
       aria-modal={mobileOpen || undefined}
       aria-labelledby={`ticket-title-${market.id}`}
     >
+      <span className="trade-sheet-grabber" aria-hidden="true" />
       <div className="trade-ticket__mobile-head">
         <span>QUICK TICKET</span>
         <button onClick={onClose} aria-label="Close trade ticket">CLOSE ×</button>
@@ -287,6 +288,7 @@ export function OvervaluedApp() {
     truth: "REAL" as "REAL" | "LARP",
   });
   const previousFocus = useRef<HTMLElement | null>(null);
+  const stageRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -325,6 +327,8 @@ export function OvervaluedApp() {
 
   useEffect(() => {
     if (!modal && !mobileTicket) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = document.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
     const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -351,6 +355,7 @@ export function OvervaluedApp() {
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = previousOverflow;
       previousFocus.current?.focus();
     };
   }, [modal, mobileTicket]);
@@ -375,6 +380,16 @@ export function OvervaluedApp() {
     setMode("BUY");
     setShares(5);
     setMobileTicket(true);
+  }
+
+  function selectMarket(marketId: string) {
+    setSelectedId(marketId);
+    if (!window.matchMedia("(max-width: 820px)").matches) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.requestAnimationFrame(() => stageRef.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "start",
+    }));
   }
 
   function executeTrade() {
@@ -412,6 +427,7 @@ export function OvervaluedApp() {
     };
     setTape((current) => [trade, ...current].slice(0, 6));
     setToast(`FILLED · ${shares} ${side} @ ${price}¢ · ${selected.probability}¢ → ${nextProbability}¢`);
+    setMobileTicket(false);
   }
 
   function rollResume() {
@@ -449,7 +465,7 @@ export function OvervaluedApp() {
   return (
     <main className="exchange-shell">
       <header className="exchange-header">
-        <button className="wordmark" onClick={() => setSelectedId(markets[0].id)} aria-label="Overvalued markets home">
+        <button className="wordmark" onClick={() => selectMarket(markets[0].id)} aria-label="Overvalued markets home">
           <span>OVER<span className="wordmark-strike">VALUED</span></span>
           <small>CANDIDATE EXCHANGE · NYC</small>
         </button>
@@ -490,14 +506,14 @@ export function OvervaluedApp() {
                 key={market.id}
                 market={market}
                 selected={market.id === selected.id}
-                onSelect={() => setSelectedId(market.id)}
+                onSelect={() => selectMarket(market.id)}
                 onTrade={(nextSide) => openTrade(market, nextSide)}
               />
             ))}
           </div>
         </aside>
 
-        <section className="market-stage">
+        <section className="market-stage" ref={stageRef}>
           <div className="stage-kicker">
             <span><i /> LIVE MARKET</span>
             <span>{selected.id} · SELF-SUBMITTED</span>
@@ -518,6 +534,15 @@ export function OvervaluedApp() {
             </div>
           </div>
 
+          <div className={`mobile-stage-actions ${mobileTicket ? "mobile-stage-actions--hidden" : ""}`}>
+            <button className="mobile-yes" onClick={() => openTrade(selected, "YES")}>
+              <span>BUY YES</span><strong>{selected.probability}¢</strong>
+            </button>
+            <button className="mobile-no" onClick={() => openTrade(selected, "NO")}>
+              <span>BUY NO</span><strong>{100 - selected.probability}¢</strong>
+            </button>
+          </div>
+
           <div className="stage-chart-card">
             <div className="chart-head">
               <div><span>MARKET PROBABILITY</span><strong>{selected.probability}¢</strong></div>
@@ -527,11 +552,6 @@ export function OvervaluedApp() {
             <ProbabilityChart values={selected.history} />
             <ProbabilityRail probability={selected.probability} />
             <div className="rail-labels"><span>0 · LARP</span><span>50 · TOO CLOSE</span><span>100 · REAL</span></div>
-          </div>
-
-          <div className="mobile-stage-actions">
-            <button className="mobile-yes" onClick={() => openTrade(selected, "YES")}>BUY YES · {selected.probability}¢</button>
-            <button className="mobile-no" onClick={() => openTrade(selected, "NO")}>BUY NO · {100 - selected.probability}¢</button>
           </div>
 
           <article className="resume-dossier">
@@ -579,11 +599,11 @@ export function OvervaluedApp() {
 
       {mobileTicket && <button className="mobile-backdrop" aria-label="Close trade ticket" onClick={() => setMobileTicket(false)} />}
 
-      <nav className="mobile-nav" aria-label="Mobile navigation">
-        <button className="active"><span>⌁</span>MARKETS</button>
-        <button onClick={() => setModal("portfolio")}><span>$</span>PORTFOLIO</button>
-        <button className="mobile-list" onClick={() => setModal("create")}><span>＋</span>LIST</button>
-        <button onClick={() => setModal("rankings")}><span>↗</span>RANKINGS</button>
+      <nav className={`mobile-nav ${mobileTicket ? "mobile-nav--covered" : ""}`} aria-label="Mobile navigation">
+        <button className={modal === null ? "active" : ""} aria-current={modal === null ? "page" : undefined}><span aria-hidden="true">⌁</span>MARKETS</button>
+        <button className={modal === "portfolio" ? "active" : ""} aria-current={modal === "portfolio" ? "page" : undefined} onClick={() => setModal("portfolio")}><span aria-hidden="true">$</span>PORTFOLIO</button>
+        <button className={`mobile-list ${modal === "create" ? "active" : ""}`} aria-current={modal === "create" ? "page" : undefined} onClick={() => setModal("create")}><span aria-hidden="true">＋</span>LIST</button>
+        <button className={modal === "rankings" ? "active" : ""} aria-current={modal === "rankings" ? "page" : undefined} onClick={() => setModal("rankings")}><span aria-hidden="true">↗</span>RANKINGS</button>
       </nav>
 
       {modal === "create" && (
@@ -594,9 +614,9 @@ export function OvervaluedApp() {
               <form onSubmit={createMarket}>
                 <p className="form-intro">Open a 15-minute market on your own résumé. Your settlement choice stays sealed until close.</p>
                 <label className="field"><span>HEADLINE</span><textarea required value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Chief Vibes Officer who..." /></label>
-                <div className="claims-field"><span>RÉSUMÉ CLAIMS</span>{draft.claims.map((claim, index) => <label key={index}><span>{String(index + 1).padStart(2, "0")}</span><input required={index === 0} value={claim} onChange={(event) => setDraft((current) => ({ ...current, claims: current.claims.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder="One suspiciously impressive bullet" /></label>)}</div>
+                <div className="claims-field"><span>RÉSUMÉ CLAIMS</span>{draft.claims.map((claim, index) => <label key={index}><span>{String(index + 1).padStart(2, "0")}</span><input aria-label={`Résumé claim ${index + 1}`} required={index === 0} value={claim} onChange={(event) => setDraft((current) => ({ ...current, claims: current.claims.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder="One suspiciously impressive bullet" /></label>)}</div>
                 <label className="field field--short"><span>ASKING TC</span><input value={draft.askingTc} onChange={(event) => setDraft((current) => ({ ...current, askingTc: event.target.value }))} /></label>
-                <div className="truth-field"><div><span>SETTLEMENT TRUTH</span><small>HIDDEN UNTIL THIS MARKET RESOLVES</small></div><div>{(["REAL", "LARP"] as const).map((truth) => <button type="button" key={truth} aria-pressed={draft.truth === truth} className={draft.truth === truth ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, truth }))}>{truth}</button>)}</div></div>
+                <div className="truth-field" role="group" aria-label="Settlement truth"><div><span>SETTLEMENT TRUTH</span><small>HIDDEN UNTIL THIS MARKET RESOLVES</small></div><div>{(["REAL", "LARP"] as const).map((truth) => <button type="button" key={truth} aria-pressed={draft.truth === truth} className={draft.truth === truth ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, truth }))}>{truth}</button>)}</div></div>
                 <div className="form-actions"><button type="button" className="randomize-button" onClick={rollResume}>🎲 ROLL A RÉSUMÉ</button><button type="submit" className="open-market-button">OPEN MARKET · 15:00</button></div>
                 <p className="form-rule">Only list your own résumé. The joke is on the genre, not the person.</p>
               </form>

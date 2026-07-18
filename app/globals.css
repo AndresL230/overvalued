@@ -32,6 +32,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-geist-sans), "Arial Narrow", Arial, sans-serif;
@@ -47,6 +48,7 @@ textarea {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 button {
@@ -989,6 +991,10 @@ textarea:focus-visible {
   overflow-y: auto;
   position: relative;
   z-index: 30;
+}
+
+.trade-sheet-grabber {
+  display: none;
 }
 
 .trade-ticket__mobile-head {
@@ -2654,6 +2660,547 @@ textarea:focus-visible {
   }
 }
 
+/* Mobile product layout: the selected market is primary; the queue becomes a compact switcher. */
+@media (max-width: 820px) {
+  .exchange-shell {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+    background-size: 36px 36px;
+  }
+
+  .exchange-header {
+    min-height: 56px;
+    height: auto;
+    padding-top: env(safe-area-inset-top);
+    position: sticky;
+    top: 0;
+    z-index: 70;
+    background: rgba(8, 10, 11, .985);
+  }
+
+  .wordmark {
+    min-height: 56px;
+    padding: 9px 12px;
+  }
+
+  .wordmark > span {
+    font-size: 19px;
+  }
+
+  .wordmark small {
+    margin-top: 4px;
+    font-size: 8px;
+  }
+
+  .header-actions {
+    gap: 0;
+    padding: 0;
+  }
+
+  .list-button {
+    display: none;
+  }
+
+  .cash-button {
+    min-width: 104px;
+    height: 56px;
+    padding: 7px 12px;
+    display: flex;
+    align-items: flex-end;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .cash-button span {
+    color: var(--muted);
+    font-size: 9px;
+  }
+
+  .cash-button strong {
+    font-size: 14px;
+  }
+
+  .live-tape {
+    height: 30px;
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .live-tape__label {
+    padding-left: 10px;
+    font-size: 8px;
+  }
+
+  .tape-trade {
+    padding-inline: 12px;
+    font-size: 8px;
+  }
+
+  .exchange-workspace {
+    min-height: calc(100dvh - 86px - env(safe-area-inset-top));
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .market-stage {
+    order: 1;
+    padding: 0 12px 28px;
+    scroll-margin-top: calc(56px + env(safe-area-inset-top));
+    background: rgba(8, 10, 11, .82);
+  }
+
+  .stage-kicker {
+    height: 38px;
+    gap: 10px;
+    font-size: 9px;
+    letter-spacing: .045em;
+  }
+
+  .stage-title-row {
+    padding: 18px 0 14px;
+  }
+
+  .stage-title-row p {
+    margin-bottom: 8px;
+    font-size: 10px;
+  }
+
+  .stage-title-row h1 {
+    max-width: 560px;
+    font-size: clamp(25px, 7.5vw, 32px);
+    line-height: 1.04;
+    text-wrap: pretty;
+  }
+
+  .stage-handle {
+    margin-top: 11px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  .stage-probability {
+    width: fit-content;
+    margin-top: 18px;
+    grid-template-columns: auto auto;
+    column-gap: 12px;
+  }
+
+  .stage-probability > strong {
+    font-size: clamp(68px, 20vw, 82px);
+  }
+
+  .stage-probability > span,
+  .stage-probability > small {
+    font-size: 10px;
+  }
+
+  .mobile-stage-actions {
+    min-height: 62px;
+    margin: 0 -12px 12px;
+    padding: 7px 12px;
+    position: sticky;
+    z-index: 58;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    gap: 8px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: rgba(8, 10, 11, .97);
+    box-shadow: 0 -12px 28px rgba(0, 0, 0, .22);
+  }
+
+  .mobile-stage-actions--hidden {
+    display: none;
+  }
+
+  .mobile-stage-actions button {
+    min-height: 48px;
+    padding: 0 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font: 750 10px/1 var(--font-geist-mono), monospace;
+  }
+
+  .mobile-stage-actions strong {
+    font-size: 16px;
+  }
+
+  .stage-chart-card {
+    border-radius: 7px;
+  }
+
+  .chart-head > div {
+    min-height: 58px;
+    padding: 10px 12px;
+  }
+
+  .chart-head span {
+    color: var(--muted);
+    font-size: 9px;
+  }
+
+  .chart-head strong {
+    font-size: 17px;
+  }
+
+  .probability-chart {
+    height: 150px;
+    grid-template-columns: 40px 1fr;
+    padding: 16px 12px 28px 8px;
+  }
+
+  .chart-scale,
+  .chart-axis,
+  .rail-labels {
+    font-size: 8px;
+  }
+
+  .chart-axis {
+    left: 48px;
+    right: 12px;
+  }
+
+  .probability-rail {
+    margin-inline: 12px;
+  }
+
+  .rail-labels {
+    padding: 10px 12px 12px;
+  }
+
+  .resume-dossier {
+    margin-top: 14px;
+    border-radius: 7px;
+  }
+
+  .dossier-seal,
+  .dossier-section-label {
+    min-height: 34px;
+    height: auto;
+    font-size: 9px;
+  }
+
+  .dossier-head > div {
+    min-height: 61px;
+    padding: 13px 14px;
+  }
+
+  .dossier-head span {
+    font-size: 9px;
+  }
+
+  .dossier-head strong {
+    font-size: 12px;
+  }
+
+  .claim-list li {
+    min-height: 60px;
+    padding: 10px 14px;
+  }
+
+  .claim-list strong {
+    font-size: 13px;
+    line-height: 1.32;
+  }
+
+  .ego-safety {
+    padding: 12px 14px;
+    font-size: 9px;
+  }
+
+  .market-activity {
+    margin-top: 14px;
+  }
+
+  .section-heading,
+  .activity-row,
+  .empty-activity {
+    font-size: 9px;
+  }
+
+  .market-queue {
+    order: 2;
+    padding: 18px 0 22px;
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    background: var(--surface-1);
+  }
+
+  .queue-head {
+    padding: 0 12px 10px;
+    border-bottom: 0;
+    background: transparent;
+  }
+
+  .queue-head > div:first-child {
+    margin-bottom: 10px;
+    font-size: 10px;
+  }
+
+  .search-field {
+    height: 44px;
+  }
+
+  .search-field input {
+    font-size: 16px;
+    letter-spacing: .02em;
+  }
+
+  .sort-tabs {
+    margin-top: 8px;
+  }
+
+  .sort-tabs button {
+    height: 44px;
+    font-size: 10px;
+  }
+
+  .queue-list {
+    gap: 9px;
+    padding: 0 12px 4px;
+    scroll-padding-inline: 12px;
+  }
+
+  .market-row {
+    flex-basis: min(76vw, 276px);
+    min-height: 146px;
+    border-radius: 7px;
+    background: var(--bg);
+  }
+
+  .market-row__main {
+    min-height: 100%;
+    padding: 13px 14px 12px;
+  }
+
+  .market-row__meta,
+  .market-row__sub {
+    font-size: 9px;
+  }
+
+  .market-row__title {
+    margin: 11px 0 9px;
+    font-size: 15px;
+  }
+
+  .market-row__sub > span:last-child,
+  .market-row__visual .probability-chart,
+  .market-row__actions {
+    display: none;
+  }
+
+  .market-row__visual {
+    display: block;
+    margin-top: 12px;
+  }
+
+  .market-row__odds {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .market-row__odds strong {
+    font-size: 27px;
+  }
+
+  .market-row__odds small {
+    margin-top: 0;
+    font-size: 9px;
+  }
+
+  .mobile-nav {
+    height: calc(64px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    transition: transform 160ms ease;
+  }
+
+  .mobile-nav--covered {
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+
+  .mobile-nav button {
+    min-height: 56px;
+    gap: 4px;
+    font-size: 9px;
+  }
+
+  .mobile-nav button span {
+    font-size: 17px;
+  }
+
+  .mobile-nav .mobile-list span {
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+  }
+
+  .trade-ticket--open {
+    height: min(86dvh, 720px);
+    max-height: 86dvh;
+    padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 14px 14px 0 0;
+    overscroll-behavior: contain;
+  }
+
+  .trade-sheet-grabber {
+    width: 44px;
+    height: 4px;
+    margin: 9px auto 2px;
+    display: block;
+    border-radius: 3px;
+    background: var(--line-bright);
+  }
+
+  .trade-ticket__mobile-head {
+    height: 48px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-1);
+    font-size: 10px;
+  }
+
+  .trade-ticket__mobile-head button {
+    min-width: 68px;
+    min-height: 44px;
+    display: block;
+    font-size: 10px;
+  }
+
+  .ticket-context {
+    padding: 14px 0 16px;
+  }
+
+  .ticket-context > span,
+  .ticket-context > div {
+    font-size: 9px;
+  }
+
+  .ticket-context h2 {
+    font-size: 18px;
+  }
+
+  .ticket-mode {
+    height: 44px;
+  }
+
+  .ticket-mode button,
+  .side-selector span,
+  .ticket-section-label {
+    font-size: 10px;
+  }
+
+  .side-selector button {
+    min-height: 74px;
+  }
+
+  .side-selector strong {
+    font-size: 24px;
+  }
+
+  .share-stepper {
+    height: 52px;
+  }
+
+  .quick-amounts button {
+    height: 40px;
+    font-size: 10px;
+  }
+
+  .trade-economics > div,
+  .ticket-error {
+    font-size: 9px;
+  }
+
+  .trade-economics dd {
+    font-size: 11px;
+  }
+
+  .submit-trade {
+    min-height: 54px;
+    position: sticky;
+    z-index: 2;
+    bottom: max(4px, env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 24px var(--surface-1);
+    font-size: 12px;
+  }
+
+  .ticket-fineprint {
+    font-size: 8px;
+  }
+
+  .modal-layer {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .create-modal,
+  .panel-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    border: 0;
+    border-radius: 0;
+    overscroll-behavior: contain;
+  }
+
+  .modal-head {
+    min-height: calc(58px + env(safe-area-inset-top));
+    padding: calc(9px + env(safe-area-inset-top)) 14px 9px;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--surface-1);
+  }
+
+  .modal-head button {
+    min-width: 72px;
+    min-height: 44px;
+    font-size: 10px;
+  }
+
+  .create-grid form {
+    padding: 18px 16px 32px;
+  }
+
+  .field textarea,
+  .field input,
+  .claims-field input {
+    font-size: 16px;
+  }
+
+  .field input,
+  .claims-field label {
+    min-height: 48px;
+  }
+
+  .truth-field button,
+  .form-actions button,
+  .referral-box button {
+    min-height: 44px;
+  }
+
+  .portfolio-summary > div {
+    min-height: 88px;
+  }
+
+  .position-row,
+  .leaderboard-table > div {
+    min-height: 56px;
+  }
+
+  .trade-toast {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    font-size: 9px;
+  }
+}
+
 @media (max-width: 480px) {
   .chart-head {
     grid-template-columns: 1fr 1fr;
@@ -2691,6 +3238,27 @@ textarea:focus-visible {
 
   .leaderboard-table small {
     display: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .wordmark small {
+    display: none;
+  }
+
+  .cash-button {
+    min-width: 96px;
+  }
+
+  .stage-title-row h1 {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 820px) and (max-height: 600px) {
+  .trade-ticket--open {
+    height: 94dvh;
+    max-height: 94dvh;
   }
 }
 
