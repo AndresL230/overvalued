@@ -22,6 +22,7 @@ import { useOddsHistory } from './useOddsHistory';
 export interface MarketCardProps {
   market: MarketPublic;
   onSelect?: (m: MarketPublic, side?: Side, trigger?: HTMLElement) => void;
+  onViewResume?: (m: MarketPublic) => void;
   className?: string;
 }
 
@@ -30,7 +31,12 @@ function cents(c: number): string {
   return `${c}¢`;
 }
 
-export function MarketCard({ market, onSelect, className = '' }: MarketCardProps) {
+export function MarketCard({
+  market,
+  onSelect,
+  onViewResume,
+  className = '',
+}: MarketCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { history, dir, delta, ticks } = useOddsHistory(
     market.id,
@@ -252,6 +258,26 @@ export function MarketCard({ market, onSelect, className = '' }: MarketCardProps
             </button>
           )}
         </div>
+      )}
+
+      {onViewResume && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewResume(market);
+          }}
+          aria-haspopup="dialog"
+          aria-controls="resume-viewer"
+          className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-line bg-surface-2 px-3 text-left transition-colors hover:border-gold/45 hover:bg-line/65 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+        >
+          <span className="text-[12px] font-extrabold tracking-[0.1em] text-fg uppercase">
+            View résumé
+          </span>
+          <span className="text-[10px] font-bold tracking-[0.12em] text-gold uppercase">
+            1 page ↗
+          </span>
+        </button>
       )}
 
       {/* --- prices -------------------------------------------------------- */}

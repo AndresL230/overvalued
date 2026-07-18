@@ -14,6 +14,7 @@ import { nextExpiryMs, useNow } from './useCountdown';
 export interface MarketBoardProps {
   markets: MarketPublic[];
   onSelect?: (m: MarketPublic, side?: Side, trigger?: HTMLElement) => void;
+  onViewResume?: (m: MarketPublic) => void;
   /** Sticky "N live · next check M:SS" strip. */
   showHeader?: boolean;
   emptyLabel?: string;
@@ -37,6 +38,7 @@ export function sortMarkets(markets: MarketPublic[]): MarketPublic[] {
 export function MarketBoard({
   markets,
   onSelect,
+  onViewResume,
   showHeader = true,
   emptyLabel = 'No markets yet. Post a résumé and let the floor price it.',
   className = '',
@@ -88,7 +90,11 @@ export function MarketBoard({
       <ul className="flex flex-col gap-3">
         {active.map((m) => (
           <li key={m.id}>
-            <MarketCard market={m} onSelect={onSelect} />
+            <MarketCard
+              market={m}
+              onSelect={onSelect}
+              onViewResume={onViewResume}
+            />
           </li>
         ))}
 
@@ -105,7 +111,7 @@ export function MarketBoard({
 
         {resolved.map((m) => (
           <li key={m.id}>
-            <MarketCard market={m} />
+            <MarketCard market={m} onViewResume={onViewResume} />
           </li>
         ))}
       </ul>
