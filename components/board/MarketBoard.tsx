@@ -7,13 +7,13 @@
 // ============================================================================
 
 import { useMemo } from 'react';
-import { fmtCountdown, type MarketPublic } from '@/lib/types';
+import { fmtCountdown, type MarketPublic, type Side } from '@/lib/types';
 import { MarketCard } from './MarketCard';
 import { nextExpiryMs, useNow } from './useCountdown';
 
 export interface MarketBoardProps {
   markets: MarketPublic[];
-  onSelect?: (m: MarketPublic) => void;
+  onSelect?: (m: MarketPublic, side?: Side, trigger?: HTMLElement) => void;
   /** Sticky "N live · next check M:SS" strip. */
   showHeader?: boolean;
   emptyLabel?: string;
@@ -65,7 +65,7 @@ export function MarketBoard({
   return (
     <div className={className}>
       {showHeader && (
-        <div className="sticky top-0 z-20 -mx-4 mb-3 border-b border-line bg-ink/85 px-4 py-2.5 backdrop-blur-md">
+        <div className="sticky top-14 z-20 -mx-4 mb-3 border-b border-line bg-ink px-4 py-2.5">
           <div className="flex items-baseline justify-between gap-3 text-[11px] font-bold tracking-[0.16em] uppercase">
             <span className="flex items-center gap-2 text-muted">
               <span className="h-1.5 w-1.5 rounded-full bg-yes" />
@@ -85,7 +85,7 @@ export function MarketBoard({
         </div>
       )}
 
-      <ul className="flex flex-col gap-3 pb-24">
+      <ul className="flex flex-col gap-3">
         {active.map((m) => (
           <li key={m.id}>
             <MarketCard market={m} onSelect={onSelect} />

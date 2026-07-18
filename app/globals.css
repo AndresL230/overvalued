@@ -85,6 +85,11 @@ body {
 .pulse-urgent { animation: ov-pulse-urgent 1s steps(2, end) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .flash-up, .flash-down, .shake, .stamp, .pulse-urgent {
     animation: none !important;
   }

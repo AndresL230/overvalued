@@ -65,7 +65,22 @@ function CreateSheetForm({
   const [tagline, setTagline] = useState('');
   const [offline, setOffline] = useState(false);
 
-  const titleRef = useRef<HTMLInputElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    openerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const frame = requestAnimationFrame(() => {
+      closeButtonRef.current?.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      openerRef.current?.focus({ preventScroll: true });
+    };
+  }, []);
 
   // Escape to close, and lock the page behind the sheet.
   useEffect(() => {
@@ -170,7 +185,7 @@ function CreateSheetForm({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div
-        className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/78"
         onClick={submitting ? undefined : onClose}
         aria-hidden
       />
@@ -181,9 +196,9 @@ function CreateSheetForm({
         aria-modal="true"
         aria-label="List your own résumé"
         className={[
-          'relative flex max-h-[92vh] w-full flex-col overflow-hidden',
-          'rounded-t-2xl border-t border-line bg-surface',
-          'sm:max-w-lg sm:rounded-2xl sm:border',
+          'relative flex max-h-[92dvh] w-full flex-col overflow-hidden',
+          'rounded-t-[24px] border-t border-line bg-surface',
+          'sm:max-w-lg sm:rounded-[24px] sm:border',
           errors.form || errors.title || errors.bullets || errors.tc || errors.truth
             ? 'shake'
             : '',
@@ -201,11 +216,12 @@ function CreateSheetForm({
             </p>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             disabled={submitting}
             aria-label="Close"
-            className="-mr-1 -mt-1 shrink-0 rounded-lg px-2.5 py-1.5 text-xl leading-none text-muted transition-colors hover:bg-surface-2 hover:text-fg disabled:opacity-50"
+            className="-mr-1 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-muted transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:opacity-50"
           >
             ✕
           </button>
@@ -235,7 +251,6 @@ function CreateSheetForm({
             error={errors.title}
           >
             <input
-              ref={titleRef}
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))}
               placeholder="Chief Vibes Architect"
@@ -278,7 +293,7 @@ function CreateSheetForm({
                       onClick={() => removeBulletAt(i)}
                       disabled={submitting}
                       aria-label={`Remove bullet ${i + 1}`}
-                      className="shrink-0 rounded-lg px-2 py-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-no disabled:opacity-50"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm text-muted transition-colors hover:bg-surface-2 hover:text-no disabled:opacity-50"
                     >
                       ✕
                     </button>
@@ -290,7 +305,7 @@ function CreateSheetForm({
                   type="button"
                   onClick={() => setBullets((c) => [...c, ''])}
                   disabled={submitting}
-                  className="text-xs font-semibold text-muted transition-colors hover:text-gold disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center text-xs font-semibold text-muted transition-colors hover:text-gold disabled:opacity-50"
                 >
                   + add a line
                 </button>
