@@ -4,10 +4,19 @@ import { NextResponse } from 'next/server';
 // ============================================================================
 // The résumé desk. Generates ONE candidate card of insufferable LinkedIn-speak.
 //
+// Accepts three shapes of seed:
+//   1. multipart/form-data with `file`  — a real résumé (PDF / text), sent to
+//      Gemini as inline data
+//   2. JSON `{ seed: "..." }`           — pasted text or rough notes
+//   3. nothing                          — the model invents one from scratch
+//
 // Server-only: GEMINI_API_KEY never reaches the browser. If the key is absent
 // or the call fails, this returns 503 and the client silently falls back to
-// the local wordlist generator — the booth keeps working with the wifi down,
-// which is the whole reason the wordlists still exist.
+// the local wordlist generator — the booth keeps working with the wifi down.
+//
+// PRIVACY: an uploaded résumé is sent to Google to generate the card. It is
+// never written to disk and never stored in the database — only the generated
+// parody card is persisted. The UI says so at the upload control.
 // ============================================================================
 
 export const runtime = 'nodejs';
@@ -16,6 +25,20 @@ export const dynamic = 'force-dynamic';
 
 /** Overridable so a model rename doesn't require a code change at the booth. */
 const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+
+/** Gemini reads these natively. DOCX is NOT on the list — export to PDF. */
+const ACCEPTED_MIME: Record<string, string> = {
+  'application/pdf': 'application/pdf',
+  'text/plain': 'text/plain',
+  'text/markdown': 'text/plain',
+  'text/x-markdown': 'text/plain',
+  'text/csv': 'text/plain',
+  'text/rtf': 'text/rtf',
+  'application/rtf': 'text/rtf',
+};
+
+/** Résumés are small. This is a guard against someone uploading a film. */
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 const SYSTEM = `You are the résumé desk for "Overvalued," a satirical prediction market about
 LinkedIn/résumé inflation. Given a seed (a real résumé, a few rough notes, or
@@ -38,6 +61,10 @@ Rules:
   disruptions."
 - Keep it PG-13. Roast the GENRE of self-promotion, never a real person, group,
   company, or protected class. No names of real people or companies.
+- If the seed is a real résumé, inflate THAT person's actual domain and history
+  — the joke should be recognisably about their work. Never copy their real
+  employer or school names, and never reproduce lines from the document
+  verbatim.
 - IMPORTANT: write the SAME confident register whether the seed is impressive or
   empty. Do not signal whether the underlying résumé is real. The card must never
   hint at legitimacy either way.`;
@@ -64,7 +91,6 @@ const CARD_SCHEMA = {
     tagline: { type: Type.STRING, description: 'One line, max 8 words' },
   },
   required: ['ticker', 'title', 'bullets', 'asking_tc', 'tagline'],
-  // Gemini honours declaration order when generating; keep it stable.
   propertyOrdering: ['ticker', 'title', 'bullets', 'asking_tc', 'tagline'],
 };
 
@@ -97,6 +123,46 @@ function sanitize(card: ResumeCard): ResumeCard {
   };
 }
 
+type Seed =
+  | { kind: 'none' }
+  | { kind: 'text'; text: string }
+  | { kind: 'file'; mimeType: string; base64: string; filename: string };
+
+/** Reads the seed out of either a multipart upload or a JSON body. */
+async function readSeed(req: Request): Promise<Seed | { error: string; status: number }> {
+  const contentType = req.headers.get('content-type') ?? '';
+
+  if (contentType.includes('multipart/form-data')) {
+    const form = await req.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) {
+      const text = String(form.get('seed') ?? '').slice(0, 4000);
+      return text ? { kind: 'text', text } : { kind: 'none' };
+    }
+    if (file.size === 0) return { kind: 'none' };
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return { error: 'file_too_large', status: 413 };
+    }
+    const mimeType = ACCEPTED_MIME[file.type];
+    if (!mimeType) {
+      // DOCX lands here. Gemini can't read it natively and silently guessing a
+      // type produces garbage, so say so rather than fail mysteriously.
+      return { error: 'unsupported_file_type', status: 415 };
+    }
+    const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
+    return { kind: 'file', mimeType, base64, filename: file.name };
+  }
+
+  try {
+    const body = await req.json();
+    const text = typeof body?.seed === 'string' ? body.seed.slice(0, 4000) : '';
+    return text ? { kind: 'text', text } : { kind: 'none' };
+  } catch {
+    // no body is a valid request — the seed is optional
+    return { kind: 'none' };
+  }
+}
+
 export async function POST(req: Request) {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   if (!apiKey) {
@@ -106,27 +172,40 @@ export async function POST(req: Request) {
     );
   }
 
-  let seed = '';
-  try {
-    const body = await req.json();
-    seed = typeof body?.seed === 'string' ? body.seed.slice(0, 4000) : '';
-  } catch {
-    // no body is a valid request — the seed is optional
+  const seed = await readSeed(req);
+  if ('error' in seed) {
+    return NextResponse.json({ error: seed.error }, { status: seed.status });
   }
+
+  // Build the user turn. A file becomes an inlineData part alongside the
+  // instruction; text and empty seeds are plain text.
+  const INSTRUCTION =
+    seed.kind === 'file'
+      ? 'The attached document is my résumé. Generate one candidate card from it.'
+      : seed.kind === 'text'
+        ? `Seed: ${seed.text}\nGenerate one candidate card.`
+        : 'Seed: (empty)\nGenerate one candidate card.';
+
+  const parts =
+    seed.kind === 'file'
+      ? [
+          { inlineData: { mimeType: seed.mimeType, data: seed.base64 } },
+          { text: INSTRUCTION },
+        ]
+      : [{ text: INSTRUCTION }];
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: MODEL,
-      contents: `Seed: ${seed || '(empty)'}\nGenerate one candidate card.`,
+      contents: [{ role: 'user', parts }],
       config: {
         systemInstruction: SYSTEM,
         responseMimeType: 'application/json',
         responseSchema: CARD_SCHEMA,
         maxOutputTokens: 1024,
         // A booth visitor is holding a phone waiting for the dice to land, so
-        // this is tuned for latency: thinking off. The task is short and
-        // well-specified enough not to need it.
+        // this is tuned for latency: thinking off.
         thinkingConfig: { thinkingBudget: 0 },
         // The dice must feel different every roll.
         temperature: 1.1,
@@ -143,9 +222,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'incomplete_card' }, { status: 503 });
     }
 
-    return NextResponse.json(card, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+    return NextResponse.json(card, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown';
     console.error('[overvalued] résumé generation failed:', detail);
