@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type {
   MarketPublic,
@@ -45,18 +45,18 @@ export function Portfolio({
 
   const playerId = player.id;
 
-  const load = useCallback(
-    async (signal: { cancelled: boolean }) => {
-      setLoading(true);
-      const [pRes, tRes] = await Promise.all([
-        supabase.from('positions').select('*').eq('player_id', playerId),
-        supabase
-          .from('trades')
-          .select('*')
-          .eq('player_id', playerId)
-          .order('id', { ascending: true }),
-      ]);
-      if (signal.cancelled) return;
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      supabase.from('positions').select('*').eq('player_id', playerId),
+      supabase
+        .from('trades')
+        .select('*')
+        .eq('player_id', playerId)
+        .order('id', { ascending: true }),
+    ]).then(([pRes, tRes]) => {
+      if (cancelled) return;
 
       const err = pRes.error ?? tRes.error;
       setError(err ? err.message : null);
@@ -73,17 +73,12 @@ export function Portfolio({
         );
       }
       setLoading(false);
-    },
-    [playerId],
-  );
+    });
 
-  useEffect(() => {
-    const signal = { cancelled: false };
-    void load(signal);
     return () => {
-      signal.cancelled = true;
+      cancelled = true;
     };
-  }, [load, refreshKey]);
+  }, [playerId, refreshKey]);
 
   // Aggregate mark + unrealized across every open leg, for the cash header.
   const { openMarkCents, unrealizedCents } = useMemo(() => {

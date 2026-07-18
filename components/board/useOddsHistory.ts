@@ -8,11 +8,16 @@
 // prob_yes_bps over realtime. So we simply remember what we have been told.
 //
 // The store lives at module scope so history survives a card unmounting
-// (scroll virtualization, tab switches, /board vs / sharing a tab) instead of
+// (scroll virtualization, tab switches, /board and / sharing a tab) instead of
 // resetting the sparkline to a single flat point.
+//
+// Both hooks below accumulate *derived* state as props change, so they use
+// React's documented "adjust state during render" pattern rather than an
+// effect. Every store write they make is idempotent for a given render input,
+// which is what makes that safe under StrictMode's double render.
 // ============================================================================
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { MarketPublic } from '@/lib/types';
 
 export interface OddsPoint {
@@ -38,7 +43,10 @@ export function seedOddsHistory(marketId: string, bps: number): OddsPoint[] {
   return seeded;
 }
 
-/** Append a point, but only when the value actually moved. */
+/**
+ * Append a point, but only when the value actually moved. Calling this twice
+ * with the same value is a no-op that returns the identical array reference.
+ */
 export function recordOdds(
   marketId: string,
   bps: number,
@@ -87,20 +95,23 @@ export function useOddsHistory(
     seedOddsHistory(marketId, bps),
   );
   const [ticks, setTicks] = useState(0);
-  const lastRef = useRef<{ id: string; bps: number }>({ id: marketId, bps });
+  const [seen, setSeen] = useState<{ id: string; bps: number }>({
+    id: marketId,
+    bps,
+  });
 
-  useEffect(() => {
+  if (seen.id !== marketId || seen.bps !== bps) {
+    // Swapping which market this card renders is not a price move.
+    const sameMarket = seen.id === marketId;
+    setSeen({ id: marketId, bps });
     setHistory(recordOdds(marketId, bps, max));
-    const prev = lastRef.current;
-    lastRef.current = { id: marketId, bps };
-    // Only count a real move on the same market — swapping ids is not a tick.
-    if (prev.id === marketId && prev.bps !== bps) setTicks((n) => n + 1);
-  }, [marketId, bps, max]);
+    if (sameMarket) setTicks((n) => n + 1);
+  }
 
   const last = history[history.length - 1];
   const prev = history[history.length - 2];
-  const delta = last && prev ? last.bps - prev.bps : 0;
   const first = history[0];
+  const delta = last && prev ? last.bps - prev.bps : 0;
   const netDelta = last && first ? last.bps - first.bps : 0;
 
   return {
@@ -123,43 +134,65 @@ export interface OddsMove {
   to: number;
   /** Signed bps change. */
   delta: number;
-  t: number;
 }
 
-let moveSeq = 0;
+interface Feed {
+  moves: OddsMove[];
+  /** Monotonic counter, kept in state so move keys stay deterministic. */
+  seq: number;
+  /** Last prob_yes_bps we observed per market. */
+  seen: Record<string, number>;
+}
+
+function snapshotBps(markets: MarketPublic[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of markets) out[m.id] = m.prob_yes_bps;
+  return out;
+}
 
 /**
  * Watch a whole market list and emit a newest-first log of price moves.
  * Purely observational — no fetching, no subscriptions of its own.
  */
-export function useRecentMoves(
-  markets: MarketPublic[],
-  max = 24,
-): OddsMove[] {
-  const prevRef = useRef<Map<string, number>>(new Map());
-  const [moves, setMoves] = useState<OddsMove[]>([]);
+export function useRecentMoves(markets: MarketPublic[], max = 24): OddsMove[] {
+  const [feed, setFeed] = useState<Feed>(() => ({
+    moves: [],
+    seq: 0,
+    seen: snapshotBps(markets),
+  }));
 
-  useEffect(() => {
-    const fresh: OddsMove[] = [];
-    const t = Date.now();
-    for (const m of markets) {
-      const before = prevRef.current.get(m.id);
-      prevRef.current.set(m.id, m.prob_yes_bps);
-      if (before === undefined || before === m.prob_yes_bps) continue;
-      fresh.push({
-        key: `${m.id}:${(moveSeq += 1)}`,
-        marketId: m.id,
-        title: m.title,
-        from: before,
-        to: m.prob_yes_bps,
-        delta: m.prob_yes_bps - before,
-        t,
-      });
+  const fresh: OddsMove[] = [];
+  let sawNewMarket = false;
+
+  for (const m of markets) {
+    const before = feed.seen[m.id];
+    if (before === undefined) {
+      sawNewMarket = true;
+      continue;
     }
-    if (fresh.length === 0) return;
-    fresh.reverse();
-    setMoves((cur) => [...fresh, ...cur].slice(0, max));
-  }, [markets, max]);
+    if (before === m.prob_yes_bps) continue;
+    fresh.push({
+      key: `${m.id}:${feed.seq + fresh.length}`,
+      marketId: m.id,
+      title: m.title,
+      from: before,
+      to: m.prob_yes_bps,
+      delta: m.prob_yes_bps - before,
+    });
+  }
 
-  return moves;
+  if (fresh.length > 0 || sawNewMarket) {
+    // Replacement (not an updater) so a double render produces the same list
+    // rather than appending the same moves twice.
+    setFeed({
+      moves:
+        fresh.length > 0
+          ? [...[...fresh].reverse(), ...feed.moves].slice(0, max)
+          : feed.moves,
+      seq: feed.seq + fresh.length,
+      seen: snapshotBps(markets),
+    });
+  }
+
+  return feed.moves;
 }

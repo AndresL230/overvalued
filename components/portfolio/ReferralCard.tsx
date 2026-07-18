@@ -1,6 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { REFERRAL_BONUS, fmtCents, type Player } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -40,22 +46,27 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+// Client-only values read through useSyncExternalStore: the server snapshot
+// keeps hydration honest, then the real value lands on the client.
+const noSubscribe = () => () => {};
+const getOrigin = () => window.location.origin;
+const serverOrigin = () => '';
+const getCanShare = () => typeof navigator.share === 'function';
+const serverCanShare = () => false;
+
 export interface ReferralCardProps {
   player: Player;
   className?: string;
 }
 
 export function ReferralCard({ player, className = '' }: ReferralCardProps) {
-  // Resolved after mount so SSR and the first client render agree.
-  const [origin, setOrigin] = useState('');
-  const [canShare, setCanShare] = useState(false);
+  const origin = useSyncExternalStore(noSubscribe, getOrigin, serverOrigin);
+  const canShare = useSyncExternalStore(noSubscribe, getCanShare, serverCanShare);
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setOrigin(typeof window !== 'undefined' ? window.location.origin : '');
-    setCanShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function');
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };

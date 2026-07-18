@@ -30,15 +30,16 @@ export function OddsNumber({
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // Under reduced motion we render `bps` directly, so there is nothing to
+    // tween — just keep the ref honest in case the preference flips back.
+    if (reduced) {
+      currentRef.current = bps;
+      return;
+    }
+
     const from = currentRef.current;
     const to = bps;
     if (from === to) return;
-
-    if (reduced) {
-      currentRef.current = to;
-      setDisplay(to);
-      return;
-    }
 
     const start = performance.now();
     const step = (now: number) => {
@@ -63,7 +64,7 @@ export function OddsNumber({
 
   return (
     <span className={`tnum ${className}`} suppressHydrationWarning>
-      {fmtBps(display)}
+      {fmtBps(reduced ? bps : display)}
     </span>
   );
 }

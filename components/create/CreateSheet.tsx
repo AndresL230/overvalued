@@ -38,12 +38,20 @@ interface Errors {
 
 const emptyRows = () => Array.from({ length: START_ROWS }, () => '');
 
-export function CreateSheet({
+/**
+ * Thin shell. Unmounting the form while closed is what gives every visitor a
+ * blank sheet — no reset logic, no stale state from the last person in line.
+ */
+export function CreateSheet({ open, ...rest }: CreateSheetProps) {
+  if (!open) return null;
+  return <CreateSheetForm {...rest} />;
+}
+
+function CreateSheetForm({
   playerId,
-  open,
   onClose,
   onCreated,
-}: CreateSheetProps) {
+}: Omit<CreateSheetProps, 'open'>) {
   const [title, setTitle] = useState('');
   const [bullets, setBullets] = useState<string[]>(emptyRows);
   const [tcRaw, setTcRaw] = useState('');
@@ -54,20 +62,8 @@ export function CreateSheet({
 
   const titleRef = useRef<HTMLInputElement>(null);
 
-  // Fresh sheet every time it opens — nobody wants the last person's résumé.
-  useEffect(() => {
-    if (!open) return;
-    setTitle('');
-    setBullets(emptyRows());
-    setTcRaw('');
-    setIsReal(null);
-    setErrors({});
-    setSubmitting(false);
-  }, [open]);
-
   // Escape to close, and lock the page behind the sheet.
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -78,7 +74,7 @@ export function CreateSheet({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [onClose]);
 
   const askingTc = useMemo(() => parseAskingTc(tcRaw), [tcRaw]);
 
@@ -149,8 +145,6 @@ export function CreateSheet({
     onCreated?.(data as string);
     onClose();
   }
-
-  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">

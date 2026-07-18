@@ -32,35 +32,25 @@ export function RevealQueue({
   onDone,
   revealMs = 4200,
 }: RevealQueueProps) {
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const playedRef = useRef<Set<string>>(new Set());
+  const [played, setPlayed] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
 
-  // Everything not yet played, in arrival order.
-  const queue = pending.filter((p) => !playedRef.current.has(p.market.id));
-
-  // Pull the next one off the front whenever the stage is free.
-  useEffect(() => {
-    if (activeId !== null) return;
-    const next = queue[0];
-    if (next) setActiveId(next.market.id);
-  }, [activeId, queue]);
-
-  // The entry currently on stage. If the parent yanked it from `pending`
-  // mid-play, fall through to null and the effect above picks up the next.
-  const active = activeId
-    ? (pending.find((p) => p.market.id === activeId) ?? null)
-    : null;
-
-  useEffect(() => {
-    if (activeId !== null && active === null) setActiveId(null);
-  }, [activeId, active]);
+  // Everything not yet played, in arrival order. The head of this queue IS the
+  // reveal on stage — derived during render, so there is no effect to sync and
+  // no window where two modals can be mounted at once.
+  const queue = pending.filter((p) => !played.has(p.market.id));
+  const active = queue[0] ?? null;
 
   if (!active) return null;
 
   const handleDone = () => {
     const id = active.market.id;
-    playedRef.current.add(id);
-    setActiveId(null);
+    setPlayed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     onDone(id);
   };
 

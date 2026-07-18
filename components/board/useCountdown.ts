@@ -2,48 +2,51 @@
 
 // ============================================================================
 // BOARD lane — time + motion primitives.
-// One shared interval drives every countdown on screen. A board with 20 cards
-// should not own 20 timers; that is how a booth kiosk starts dropping frames.
+//
+// Both hooks here read *browser* state (the wall clock, a media query), which
+// makes them textbook `useSyncExternalStore` cases rather than effect+setState.
+// One shared interval drives every countdown on screen: a board with 20 cards
+// should not own 20 timers, which is how a booth kiosk starts dropping frames.
 // ============================================================================
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { fmtCountdown, msUntil } from '@/lib/types';
-
-type Listener = (t: number) => void;
-
-const listeners = new Set<Listener>();
-let timer: ReturnType<typeof setInterval> | null = null;
 
 const TICK_MS = 250;
 
-function subscribe(fn: Listener): () => void {
-  listeners.add(fn);
+let currentTick = 0;
+let timer: ReturnType<typeof setInterval> | null = null;
+const tickListeners = new Set<() => void>();
+
+function subscribeTick(onChange: () => void): () => void {
+  tickListeners.add(onChange);
   if (timer === null) {
+    currentTick = Date.now();
     timer = setInterval(() => {
-      const t = Date.now();
-      for (const l of listeners) l(t);
+      currentTick = Date.now();
+      for (const l of tickListeners) l();
     }, TICK_MS);
   }
   return () => {
-    listeners.delete(fn);
-    if (listeners.size === 0 && timer !== null) {
+    tickListeners.delete(onChange);
+    if (tickListeners.size === 0 && timer !== null) {
       clearInterval(timer);
       timer = null;
     }
   };
 }
 
+// `currentTick` stays 0 until something subscribes, which is exactly when we
+// want to report "not mounted yet".
+const getTick = (): number | null => (currentTick === 0 ? null : currentTick);
+const getServerTick = (): number | null => null;
+
 /**
  * Wall clock, shared ticker. `null` until mounted so server and client render
- * the same markup — countdowns are inherently non-deterministic on the server.
+ * identical markup — countdowns are inherently non-deterministic on the server.
  */
 export function useNow(): number | null {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    return subscribe(setNow);
-  }, []);
-  return now;
+  return useSyncExternalStore(subscribeTick, getTick, getServerTick);
 }
 
 export interface Countdown {
@@ -63,8 +66,7 @@ export function useCountdown(iso: string, urgentMs = 30_000): Countdown {
   if (now === null) {
     return { ms: null, label: '—:—', urgent: false, done: false };
   }
-  const raw = new Date(iso).getTime() - now;
-  const ms = Math.max(0, raw);
+  const ms = Math.max(0, new Date(iso).getTime() - now);
   return {
     ms,
     label: fmtCountdown(ms),
@@ -84,15 +86,29 @@ export function nextExpiryMs(isos: string[]): number | null {
   return best;
 }
 
+// --- reduced motion ---------------------------------------------------------
+
+const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
+let mql: MediaQueryList | null = null;
+
+function reducedMql(): MediaQueryList | null {
+  if (mql === null && typeof window !== 'undefined') {
+    mql = window.matchMedia(REDUCED_QUERY);
+  }
+  return mql;
+}
+
+function subscribeMotion(onChange: () => void): () => void {
+  const m = reducedMql();
+  if (m === null) return () => {};
+  m.addEventListener('change', onChange);
+  return () => m.removeEventListener('change', onChange);
+}
+
+const getMotion = (): boolean => reducedMql()?.matches ?? false;
+const getServerMotion = (): boolean => false;
+
 /** True when the viewer asked for less motion. Number tweens must respect it. */
 export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => setReduced(mq.matches);
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(subscribeMotion, getMotion, getServerMotion);
 }

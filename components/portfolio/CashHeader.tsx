@@ -21,17 +21,13 @@ function useTweenedCents(target: number, durationMs = 560): number {
   useEffect(() => {
     if (fromRef.current === target) return;
 
-    if (prefersReducedMotion()) {
-      fromRef.current = target;
-      setDisplay(target);
-      return;
-    }
-
     const from = fromRef.current;
     const start = performance.now();
+    // Reduced motion: duration 0 snaps on the very first frame.
+    const dur = prefersReducedMotion() ? 0 : durationMs;
 
     const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / durationMs);
+      const p = dur <= 0 ? 1 : Math.min(1, (t - start) / dur);
       const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
       const v = p < 1 ? Math.round(from + (target - from) * eased) : target;
       fromRef.current = v;
@@ -66,17 +62,20 @@ export function CashHeader({
   const cash = player.cash;
   const shown = useTweenedCents(cash);
 
-  // Re-key a wrapper on every change so the flash animation restarts.
-  const [flash, setFlash] = useState<{ dir: 'up' | 'down' | null; n: number }>({
-    dir: null,
-    n: 0,
-  });
+  // Flash green/red on change. Driven straight at the DOM — this is a visual
+  // side effect, not state React needs to know about.
+  const flashRef = useRef<HTMLDivElement>(null);
   const prevCash = useRef(cash);
   useEffect(() => {
-    if (prevCash.current === cash) return;
-    const dir = cash > prevCash.current ? 'up' : 'down';
+    const prev = prevCash.current;
+    if (prev === cash) return;
     prevCash.current = cash;
-    setFlash((f) => ({ dir, n: f.n + 1 }));
+    const el = flashRef.current;
+    if (!el) return;
+    const cls = cash > prev ? 'flash-up' : 'flash-down';
+    el.classList.remove('flash-up', 'flash-down');
+    void el.offsetWidth; // force reflow so the animation restarts
+    el.classList.add(cls);
   }, [cash]);
 
   const delta = cash - STARTING_CASH;
@@ -97,12 +96,7 @@ export function CashHeader({
         <span className="truncate text-xs text-muted">@{player.handle}</span>
       </div>
 
-      <div
-        key={flash.n}
-        className={`mt-1 -mx-1 rounded-lg px-1 ${
-          flash.dir === 'up' ? 'flash-up' : flash.dir === 'down' ? 'flash-down' : ''
-        }`}
-      >
+      <div ref={flashRef} className="mt-1 -mx-1 rounded-lg px-1">
         <div className="tnum text-gold text-5xl font-bold leading-none tracking-tight tabular-nums">
           {fmtCents(shown)}
         </div>
