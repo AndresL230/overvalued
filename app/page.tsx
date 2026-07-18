@@ -46,12 +46,17 @@ export default function Home() {
 
   // The leaderboard is the only view that needs the player list, so it is
   // fetched on demand rather than kept live in the provider.
+  //
+  // Bots are excluded: they market-make on a $10,000 bankroll, so leaving them
+  // in buries every human under four house accounts and makes "Fattest
+  // Portfolio" meaningless — which is the one board the booth crowd reads.
   useEffect(() => {
     if (tab !== 'leaders') return;
     let alive = true;
     void supabase
       .from('players')
       .select('id, handle, cash, ref_code, created_at, is_bot')
+      .eq('is_bot', false)
       .order('cash', { ascending: false })
       .limit(100)
       .then(({ data }) => {
