@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { MarketPublic } from '@/lib/types';
 import { RevealModal } from './RevealModal';
 
@@ -41,18 +41,25 @@ export function RevealQueue({
   // no window where two modals can be mounted at once.
   const queue = pending.filter((p) => !played.has(p.market.id));
   const active = queue[0] ?? null;
+  const activeId = active?.market.id ?? null;
 
-  if (!active) return null;
-
-  const handleDone = () => {
-    const id = active.market.id;
+  // Must be referentially stable for a given market, and so must sit above the
+  // early return. RevealModal drives its phase timers from an effect keyed on
+  // this callback, so a fresh identity every render clears and restarts them —
+  // the reveal then sits on "CHECKING REFERENCES…" forever. That is invisible
+  // while the page rarely re-renders, and instant once anything ticks above it.
+  const handleDone = useCallback(() => {
+    if (!activeId) return;
     setPlayed((prev) => {
+      if (prev.has(activeId)) return prev;
       const next = new Set(prev);
-      next.add(id);
+      next.add(activeId);
       return next;
     });
-    onDone(id);
-  };
+    onDone(activeId);
+  }, [activeId, onDone]);
+
+  if (!active) return null;
 
   return (
     <RevealModal

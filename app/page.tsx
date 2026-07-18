@@ -1,61 +1,40 @@
 'use client';
 
-// The game. Board + trade + create + portfolio + leaderboard, one screen,
-// one shared URL, no login. Everything live off the single GameProvider.
+// ============================================================================
+// The player-facing exchange.
+//
+// Layout ported from codex/clean-trade-modal: header, live tape, then a
+// two-pane workspace (market queue + stage). Below 820px the stylesheet
+// collapses the workspace to one column and swaps the desktop nav for
+// `.mobile-nav` — that is the booth case.
+//
+// All state comes from GameProvider; this lane opens no channel of its own.
+//
+// Portfolio / Leaderboard / CreateSheet are still the pre-exchange components,
+// rendered inside the exchange's `.panel-modal` chrome. They are built from
+// Tailwind utilities bound to the same tokens, so they re-colour with the new
+// palette but keep their own internal layout until they are ported too.
+// ============================================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useGame } from '@/components/providers/GameProvider';
-import { MarketBoard } from '@/components/board';
-import { TradeSheet } from '@/components/trade';
-import { CreateSheet } from '@/components/create';
 import { Portfolio } from '@/components/portfolio';
 import { RevealQueue } from '@/components/reveal';
 import { Leaderboard, type LeaderboardPlayer } from '@/components/leaderboard';
-import { fmtCents, type Side } from '@/lib/types';
+import { fmtCents, isExpired, msUntil, type MarketPublic, type Side } from '@/lib/types';
+import { LiveTape } from '@/components/exchange/LiveTape';
+import { MarketRow } from '@/components/exchange/MarketRow';
+import { MarketStage } from '@/components/exchange/MarketStage';
+import { TradeTicket } from '@/components/exchange/TradeTicket';
+import { CreateModal } from '@/components/exchange/CreateModal';
+import { useExchangeData } from '@/components/exchange/useExchangeData';
 
-type Tab = 'market' | 'portfolio' | 'leaders';
-type TradeIntent = {
-  marketId: string;
-  side: Side;
-  trigger: HTMLElement | null;
-};
+type Panel = 'portfolio' | 'rankings' | null;
+type Sort = 'ending' | 'movers' | 'volume';
 
-const navItems: { id: Tab | 'list'; label: string }[] = [
-  { id: 'market', label: 'Markets' },
-  { id: 'portfolio', label: 'Portfolio' },
-  { id: 'list', label: 'List' },
-  { id: 'leaders', label: 'Leaders' },
-];
-
-function NavIcon({ id }: { id: Tab | 'list' }) {
-  if (id === 'market') {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none">
-        <path d="M4 18.5h16M5.5 15l4-4 3 2.5 5-7 1.5 1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  if (id === 'portfolio') {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none">
-        <path d="M4 7.5h16v11H4zM7 7.5V5.75h7.5M16 12h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  if (id === 'list') {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none">
-        <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none">
-      <path d="M7 19v-5M12 19V9M17 19V5M4 19h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+const MOBILE_QUERY = '(max-width: 820px)';
 
 export default function Home() {
   const {
@@ -63,14 +42,20 @@ export default function Home() {
     refreshAll, dismissReveal, refClaim,
   } = useGame();
 
-  const [tab, setTab] = useState<Tab>('market');
-  const [tradeIntent, setTradeIntent] = useState<TradeIntent | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [side, setSide] = useState<Side>('yes');
+  const [ticketOpen, setTicketOpen] = useState(false);
+  const [panel, setPanel] = useState<Panel>(null);
   const [creating, setCreating] = useState(false);
+  const [sort, setSort] = useState<Sort>('ending');
+  const [query, setQuery] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
   const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
   const [refDismissed, setRefDismissed] = useState(false);
 
-  // Derived, not synced into state — React 19 rightly rejects a setState that
-  // runs synchronously in an effect just to mirror a prop.
+  const stageRef = useRef<HTMLElement | null>(null);
+  const { fills, volume, handles } = useExchangeData(refreshKey);
+
   const refBanner =
     refClaim && !refDismissed
       ? refClaim.ok
@@ -78,21 +63,36 @@ export default function Home() {
         : `Referral: ${refClaim.error}`
       : null;
 
-  // Bind the trade sheet to the LIVE row by id, not to a snapshot — otherwise
-  // the price in the ticket goes stale the moment someone else trades, which
-  // is exactly the moment it matters most.
-  const selected = tradeIntent
-    ? markets.find((m) => m.id === tradeIntent.marketId) ?? null
-    : null;
+  // Bind to the LIVE row by id rather than a snapshot, so the ticket price
+  // never goes stale mid-trade.
+  const selected = useMemo<MarketPublic | null>(() => {
+    if (selectedId) {
+      const hit = markets.find((m) => m.id === selectedId);
+      if (hit) return hit;
+    }
+    return markets.find((m) => !isExpired(m)) ?? markets[0] ?? null;
+  }, [markets, selectedId]);
 
-  // The leaderboard is the only view that needs the player list, so it is
-  // fetched on demand rather than kept live in the provider.
-  //
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = markets.filter(
+      (m) => !q || [m.title, ...m.bullets].some((v) => v.toLowerCase().includes(q)),
+    );
+    return [...filtered].sort((a, b) => {
+      // Settled markets sink, whatever the sort.
+      const ax = isExpired(a) ? 1 : 0;
+      const bx = isExpired(b) ? 1 : 0;
+      if (ax !== bx) return ax - bx;
+      if (sort === 'volume') return (volume[b.id] ?? 0) - (volume[a.id] ?? 0);
+      if (sort === 'movers') return b.prob_yes_bps - a.prob_yes_bps;
+      return msUntil(a.expires_at) - msUntil(b.expires_at);
+    });
+  }, [markets, query, sort, volume]);
+
   // Bots are excluded: they market-make on a $10,000 bankroll, so leaving them
-  // in buries every human under four house accounts and makes "Fattest
-  // Portfolio" meaningless — which is the one board the booth crowd reads.
+  // in buries every human and makes "Fattest Portfolio" meaningless.
   useEffect(() => {
-    if (tab !== 'leaders') return;
+    if (panel !== 'rankings') return;
     let alive = true;
     void supabase
       .from('players')
@@ -106,7 +106,7 @@ export default function Home() {
     return () => {
       alive = false;
     };
-  }, [tab, refreshKey]);
+  }, [panel, refreshKey]);
 
   useEffect(() => {
     if (!refBanner) return;
@@ -114,165 +114,289 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [refBanner]);
 
-  const onFilled = useCallback(async () => {
-    await refreshAll();
-  }, [refreshAll]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3600);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  const overlayOpen = Boolean(player && (selected || creating));
+  const openTicket = useCallback((marketId: string, nextSide: Side) => {
+    setSelectedId(marketId);
+    setSide(nextSide);
+    setTicketOpen(true);
+  }, []);
+
+  const selectMarket = useCallback((marketId: string) => {
+    setSelectedId(marketId);
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia(MOBILE_QUERY).matches) return;
+    // On a phone the stage sits below the queue, so changing it without
+    // scrolling looks like the tap did nothing.
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() =>
+      stageRef.current?.scrollIntoView({
+        behavior: reduce ? 'auto' : 'smooth',
+        block: 'start',
+      }),
+    );
+  }, []);
+
+  const onFilled = useCallback(
+    async (msg: string) => {
+      setToast(msg);
+      await refreshAll();
+    },
+    [refreshAll],
+  );
+
+  const held = selected ? (positions[selected.id] ?? { yes: 0, no: 0 }) : { yes: 0, no: 0 };
+  const activeCount = markets.filter((m) => !isExpired(m)).length;
 
   return (
-    <div className="min-h-dvh bg-ink text-fg">
-      <div
-        className="flex min-h-dvh flex-col"
-        inert={overlayOpen}
-        aria-hidden={overlayOpen ? true : undefined}
-      >
-        {/* Compact market header: identity left, bankroll right. */}
-        <header className="sticky top-0 z-30 h-14 border-b border-line bg-ink">
-          <div className="mx-auto flex h-full w-full max-w-2xl items-center justify-between gap-3 px-4">
-            <div className="min-w-0">
-              <h1 className="truncate text-[17px] leading-none font-black tracking-[-0.045em]">
-                OVER<span className="text-no">VALUED</span>
-              </h1>
-              <p className="mt-1 truncate text-[10px] leading-none tracking-[0.08em] text-muted">
-                {player?.handle ?? 'connecting…'}
-              </p>
+    <main className="exchange-shell">
+      <header className="exchange-header">
+        <button
+          className="wordmark"
+          onClick={() => selected && selectMarket(selected.id)}
+          aria-label="Overvalued markets home"
+        >
+          <span>
+            OVER<span className="wordmark-strike">VALUED</span>
+          </span>
+          <small>CANDIDATE EXCHANGE · {player?.handle ?? 'CONNECTING…'}</small>
+        </button>
+
+        <nav className="desktop-nav" aria-label="Primary navigation">
+          <button className={panel === null ? 'active' : ''} onClick={() => setPanel(null)}>
+            MARKETS <span>{activeCount}</span>
+          </button>
+          <button onClick={() => setPanel('portfolio')}>PORTFOLIO</button>
+          <button onClick={() => setPanel('rankings')}>RANKINGS</button>
+          <Link href="/board">BOOTH BOARD ↗</Link>
+        </nav>
+
+        <div className="header-actions">
+          <button className="cash-button" onClick={() => setPanel('portfolio')}>
+            <span>CASH</span>
+            <strong>{player ? fmtCents(player.cash) : '—'}</strong>
+          </button>
+          <button
+            className="list-button"
+            disabled={!player}
+            onClick={() => player && setCreating(true)}
+          >
+            ＋ LIST YOURSELF
+          </button>
+        </div>
+      </header>
+
+      <LiveTape fills={fills} />
+
+      {refBanner && (
+        <div className="trade-toast" role="status">
+          <span>✓</span>
+          {refBanner}
+        </div>
+      )}
+
+      <section className="exchange-workspace">
+        <aside className="market-queue" aria-label="Open candidate markets">
+          <div className="queue-head">
+            <div>
+              <span>OPEN MARKETS</span>
+              <strong>{activeCount}</strong>
             </div>
-            <button
-              type="button"
-              onClick={() => setTab('portfolio')}
-              aria-label="Open portfolio"
-              className="-mr-2 flex min-h-11 min-w-24 flex-col items-end justify-center rounded-lg px-2 text-right focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-            >
-              <span className="tnum text-lg leading-none font-black text-gold">
-                {player ? fmtCents(player.cash) : '—'}
-              </span>
-              <span className="mt-1 text-[9px] leading-none tracking-[0.16em] text-muted uppercase">
-                buying power
-              </span>
-            </button>
-          </div>
-        </header>
-
-        {refBanner && (
-          <div className="mx-auto w-full max-w-2xl px-4 pt-3">
-            <div className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold">
-              {refBanner}
-            </div>
-          </div>
-        )}
-
-        <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-3 pb-[calc(5.75rem+env(safe-area-inset-bottom))]">
-          {tab === 'market' && (
-            <MarketBoard
-              markets={markets}
-              onSelect={
-                player
-                  ? (m, side = 'yes', trigger) =>
-                      setTradeIntent({ marketId: m.id, side, trigger: trigger ?? null })
-                  : undefined
-              }
-            />
-          )}
-
-          {tab === 'portfolio' &&
-            (player ? (
-              <Portfolio
-                player={player}
-                markets={markets}
-                refreshKey={refreshKey}
-                onGoTrade={() => setTab('market')}
+            <label className="search-field">
+              <span className="sr-only">Search markets</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="SEARCH CANDIDATES"
               />
-            ) : (
-              <p className="py-12 text-center text-muted">connecting…</p>
-            ))}
+              <span aria-hidden="true">⌕</span>
+            </label>
+            <div className="sort-tabs" role="group" aria-label="Sort markets">
+              {(
+                [
+                  ['ending', 'ENDING'],
+                  ['movers', 'MOVERS'],
+                  ['volume', 'VOLUME'],
+                ] as [Sort, string][]
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  aria-pressed={sort === key}
+                  className={sort === key ? 'active' : ''}
+                  onClick={() => setSort(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          {tab === 'leaders' && (
+          <div className="queue-list">
+            {visible.map((m) => (
+              <MarketRow
+                key={m.id}
+                market={m}
+                volume={volume[m.id] ?? 0}
+                selected={m.id === selected?.id}
+                onSelect={() => selectMarket(m.id)}
+                onTrade={(nextSide) => player && openTicket(m.id, nextSide)}
+              />
+            ))}
+            {visible.length === 0 && (
+              <p className="empty-activity">
+                {query ? 'No candidates match that search.' : 'No markets open yet.'}
+              </p>
+            )}
+          </div>
+        </aside>
+
+        {selected ? (
+          <MarketStage
+            market={selected}
+            volume={volume[selected.id] ?? 0}
+            authorHandle={selected.author_id ? (handles[selected.author_id] ?? null) : null}
+            fills={fills}
+            stageRef={stageRef}
+            ticketOpen={ticketOpen}
+            onTrade={(nextSide) => player && openTicket(selected.id, nextSide)}
+            onViewResume={() => stageRef.current?.scrollIntoView({ block: 'start' })}
+          />
+        ) : (
+          <section className="market-stage" ref={stageRef}>
+            <p className="empty-activity">Waiting for the first candidate to hit the board.</p>
+          </section>
+        )}
+      </section>
+
+      {ticketOpen && selected && player && (
+        <div
+          className="trade-modal-layer"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setTicketOpen(false);
+          }}
+        >
+          <TradeTicket
+            market={selected}
+            playerId={player.id}
+            cash={player.cash}
+            held={held}
+            side={side}
+            onSide={setSide}
+            onClose={() => setTicketOpen(false)}
+            onFilled={onFilled}
+          />
+        </div>
+      )}
+
+      <nav
+        className={`mobile-nav ${ticketOpen ? 'mobile-nav--covered' : ''}`}
+        aria-label="Mobile navigation"
+      >
+        <button
+          className={panel === null ? 'active' : ''}
+          aria-current={panel === null ? 'page' : undefined}
+          onClick={() => setPanel(null)}
+        >
+          <span aria-hidden="true">⌁</span>MARKETS
+        </button>
+        <button
+          className={panel === 'portfolio' ? 'active' : ''}
+          aria-current={panel === 'portfolio' ? 'page' : undefined}
+          onClick={() => setPanel('portfolio')}
+        >
+          <span aria-hidden="true">$</span>PORTFOLIO
+        </button>
+        <button
+          className={`mobile-list ${creating ? 'active' : ''}`}
+          disabled={!player}
+          onClick={() => player && setCreating(true)}
+        >
+          <span aria-hidden="true">＋</span>LIST
+        </button>
+        <button
+          className={panel === 'rankings' ? 'active' : ''}
+          aria-current={panel === 'rankings' ? 'page' : undefined}
+          onClick={() => setPanel('rankings')}
+        >
+          <span aria-hidden="true">↗</span>RANKINGS
+        </button>
+      </nav>
+
+      {panel === 'portfolio' && player && (
+        <div
+          className="modal-layer"
+          role="presentation"
+          onMouseDown={(e) => e.target === e.currentTarget && setPanel(null)}
+        >
+          <section className="panel-modal" role="dialog" aria-modal="true" aria-label="Portfolio">
+            <div className="modal-head">
+              <div>
+                <span>{player.handle}</span>
+                <h2>Portfolio</h2>
+              </div>
+              <button onClick={() => setPanel(null)}>CLOSE ×</button>
+            </div>
+            <Portfolio
+              player={player}
+              markets={markets}
+              refreshKey={refreshKey}
+              onGoTrade={() => setPanel(null)}
+            />
+          </section>
+        </div>
+      )}
+
+      {panel === 'rankings' && (
+        <div
+          className="modal-layer"
+          role="presentation"
+          onMouseDown={(e) => e.target === e.currentTarget && setPanel(null)}
+        >
+          <section className="panel-modal" role="dialog" aria-modal="true" aria-label="Rankings">
+            <div className="modal-head">
+              <div>
+                <span>LIVE STANDINGS</span>
+                <h2>Best traders</h2>
+              </div>
+              <button onClick={() => setPanel(null)}>CLOSE ×</button>
+            </div>
             <Leaderboard
               players={players}
               markets={markets}
               currentPlayerId={player?.id ?? ''}
             />
-          )}
-        </main>
-
-        <nav
-          aria-label="Primary"
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-ink pb-[env(safe-area-inset-bottom)]"
-        >
-          <div className="mx-auto grid h-[68px] w-full max-w-2xl grid-cols-4">
-            {navItems.map(({ id, label }) => {
-              const active = id === 'list' ? Boolean(player && creating) : tab === id;
-              const list = id === 'list';
-              const disabled = list && !player;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  disabled={disabled}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => {
-                    if (id === 'list') {
-                      if (player) setCreating(true);
-                    }
-                    else setTab(id);
-                  }}
-                  className={[
-                    'relative flex min-h-11 flex-col items-center justify-center gap-1 text-[10px] font-bold tracking-[0.08em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-gold',
-                    list ? 'text-gold' : active ? 'text-fg' : 'text-muted',
-                    disabled ? 'cursor-not-allowed opacity-45' : '',
-                  ].join(' ')}
-                >
-                  {active && !list ? (
-                    <span aria-hidden="true" className="absolute inset-x-5 top-0 h-0.5 bg-fg" />
-                  ) : null}
-                  <span
-                    className={
-                      list
-                        ? 'flex h-8 min-w-10 items-center justify-center rounded-md bg-gold text-ink'
-                        : 'flex h-6 items-center justify-center'
-                    }
-                  >
-                    <NavIcon id={id} />
-                  </span>
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      </div>
-
-      {/* sheets ----------------------------------------------------------- */}
-      {selected && player && (
-        <TradeSheet
-          market={selected}
-          playerId={player.id}
-          cash={player.cash}
-          position={positions[selected.id]}
-          open={!!selected}
-          initialSide={tradeIntent?.side ?? 'yes'}
-          returnFocusTo={tradeIntent?.trigger}
-          onClose={() => setTradeIntent(null)}
-          onFilled={onFilled}
-        />
+          </section>
+        </div>
       )}
 
-      {player && (
-        <CreateSheet
+      {player && creating && (
+        <CreateModal
           playerId={player.id}
-          open={creating}
           onClose={() => setCreating(false)}
-          onCreated={async () => {
+          onCreated={async (marketId) => {
             setCreating(false);
             await refreshAll();
-            setTab('market');
+            // Drop the author straight onto their own market — it is the whole
+            // point of listing, and it is about to be priced by the room.
+            setSelectedId(marketId);
+            setToast('MARKET OPEN · Reference check closes in 15:00');
           }}
         />
       )}
 
-      {/* the 0:00 moment -------------------------------------------------- */}
       <RevealQueue pending={reveals} onDone={dismissReveal} />
-    </div>
+
+      {toast && (
+        <div className="trade-toast" role="status">
+          <span>✓</span>
+          {toast}
+        </div>
+      )}
+    </main>
   );
 }
