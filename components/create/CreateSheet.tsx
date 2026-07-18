@@ -1,0 +1,368 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { fmtTC } from '@/lib/types';
+import { RandomizeButton } from './RandomizeButton';
+import { RealLarpToggle } from './RealLarpToggle';
+import { parseAskingTc, type Resume } from './wordlists';
+
+// ============================================================================
+// LIST YOURSELF — the whole flow, one screen, no wizard.
+// Budget: ~10 seconds from open to on-the-board. Every extra tap loses a
+// booth visitor, so the 🎲 path fills all four fields at once and the only
+// remaining action is LIST IT.
+//
+// HOUSE RULE, stated in the UI: you only ever list your OWN résumé.
+// ============================================================================
+
+const MAX_BULLETS = 5;
+const START_ROWS = 3;
+const TITLE_MAX = 90;
+const BULLET_MAX = 120;
+
+export interface CreateSheetProps {
+  playerId: string;
+  open: boolean;
+  onClose: () => void;
+  onCreated?: (marketId: string) => void;
+}
+
+interface Errors {
+  title?: string;
+  bullets?: string;
+  tc?: string;
+  truth?: string;
+  form?: string;
+}
+
+const emptyRows = () => Array.from({ length: START_ROWS }, () => '');
+
+export function CreateSheet({
+  playerId,
+  open,
+  onClose,
+  onCreated,
+}: CreateSheetProps) {
+  const [title, setTitle] = useState('');
+  const [bullets, setBullets] = useState<string[]>(emptyRows);
+  const [tcRaw, setTcRaw] = useState('');
+  const [isReal, setIsReal] = useState<boolean | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [shake, setShake] = useState(0);
+
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  // Fresh sheet every time it opens — nobody wants the last person's résumé.
+  useEffect(() => {
+    if (!open) return;
+    setTitle('');
+    setBullets(emptyRows());
+    setTcRaw('');
+    setIsReal(null);
+    setErrors({});
+    setSubmitting(false);
+  }, [open]);
+
+  // Escape to close, and lock the page behind the sheet.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  const askingTc = useMemo(() => parseAskingTc(tcRaw), [tcRaw]);
+
+  const applyRoll = useCallback((r: Resume) => {
+    setTitle(r.title);
+    setBullets(() => {
+      const next = r.bullets.slice(0, MAX_BULLETS);
+      while (next.length < START_ROWS) next.push('');
+      return next;
+    });
+    setTcRaw(String(r.askingTc));
+    // A rolled résumé is, by definition, not yours — so LARP is the honest
+    // default. Saves the only tap left on the fast path. Author can override.
+    setIsReal((cur) => (cur === null ? false : cur));
+    setErrors({});
+  }, []);
+
+  const setBulletAt = useCallback((i: number, v: string) => {
+    setBullets((cur) => cur.map((b, j) => (j === i ? v : b)));
+  }, []);
+
+  const removeBulletAt = useCallback((i: number) => {
+    setBullets((cur) =>
+      cur.length <= 1 ? [''] : cur.filter((_, j) => j !== i),
+    );
+  }, []);
+
+  const cleanBullets = useMemo(
+    () => bullets.map((b) => b.trim()).filter(Boolean).slice(0, MAX_BULLETS),
+    [bullets],
+  );
+
+  async function submit() {
+    if (submitting) return;
+
+    const t = title.trim();
+    const next: Errors = {};
+    if (!t) next.title = 'Give yourself a title. Any title.';
+    if (cleanBullets.length < 1) next.bullets = 'One bullet minimum. Sell it.';
+    if (askingTc === null || !Number.isInteger(askingTc) || askingTc <= 0) {
+      next.tc = 'A number. "450k" and "450,000" both work.';
+    }
+    if (isReal === null) next.truth = 'Pick REAL or LARP — the market needs an answer.';
+
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
+      setShake((n) => n + 1);
+      return;
+    }
+
+    setSubmitting(true);
+    setErrors({});
+    const { data, error } = await supabase.rpc('create_market', {
+      p_player: playerId,
+      p_title: t,
+      p_bullets: cleanBullets,
+      p_asking_tc: askingTc as number,
+      p_is_real: isReal as boolean,
+    });
+
+    if (error || !data) {
+      setSubmitting(false);
+      setErrors({ form: error?.message ?? 'Could not list it. Try again.' });
+      setShake((n) => n + 1);
+      return;
+    }
+
+    onCreated?.(data as string);
+    onClose();
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+      <div
+        className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
+        onClick={submitting ? undefined : onClose}
+        aria-hidden
+      />
+
+      <div
+        key={shake}
+        role="dialog"
+        aria-modal="true"
+        aria-label="List your own résumé"
+        className={[
+          'relative flex max-h-[92vh] w-full flex-col overflow-hidden',
+          'rounded-t-2xl border-t border-line bg-surface',
+          'sm:max-w-lg sm:rounded-2xl sm:border',
+          errors.form || errors.title || errors.bullets || errors.tc || errors.truth
+            ? 'shake'
+            : '',
+        ].join(' ')}
+      >
+        {/* header */}
+        <div className="flex items-start justify-between gap-3 border-b border-line px-4 pb-3 pt-4">
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight text-fg">
+              List yourself
+            </h2>
+            <p className="mt-0.5 text-xs text-muted">
+              House rule: <span className="text-gold">only roast yourself.</span>{' '}
+              This is your résumé, nobody else&apos;s.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+            className="-mr-1 -mt-1 shrink-0 rounded-lg px-2.5 py-1.5 text-xl leading-none text-muted transition-colors hover:bg-surface-2 hover:text-fg disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* body */}
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <RandomizeButton onRoll={applyRoll} disabled={submitting} />
+
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+              or write it yourself
+            </span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+
+          {/* title */}
+          <Field
+            label="Your title"
+            hint={`${title.trim().length}/${TITLE_MAX}`}
+            error={errors.title}
+          >
+            <input
+              ref={titleRef}
+              value={title}
+              onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX))}
+              placeholder="Chief Vibes Architect"
+              autoComplete="off"
+              enterKeyHint="next"
+              disabled={submitting}
+              className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-3 text-base font-bold text-fg outline-none placeholder:font-normal placeholder:text-muted/60 focus:border-gold disabled:opacity-50"
+            />
+          </Field>
+
+          {/* bullets */}
+          <Field
+            label="Your résumé"
+            hint={`${cleanBullets.length}/${MAX_BULLETS}`}
+            error={errors.bullets}
+          >
+            <div className="space-y-2">
+              {bullets.map((b, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="shrink-0 text-sm text-muted">▸</span>
+                  <input
+                    value={b}
+                    onChange={(e) =>
+                      setBulletAt(i, e.target.value.slice(0, BULLET_MAX))
+                    }
+                    placeholder={
+                      i === 0
+                        ? 'Cut p99 latency 380ms → 42ms'
+                        : i === 1
+                          ? 'Scaled a Discord to 90k members (85k bots)'
+                          : 'One more line…'
+                    }
+                    autoComplete="off"
+                    disabled={submitting}
+                    className="w-full min-w-0 rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-base text-fg outline-none placeholder:text-muted/50 focus:border-gold disabled:opacity-50"
+                  />
+                  {bullets.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => removeBulletAt(i)}
+                      disabled={submitting}
+                      aria-label={`Remove bullet ${i + 1}`}
+                      className="shrink-0 rounded-lg px-2 py-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-no disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+              {bullets.length < MAX_BULLETS ? (
+                <button
+                  type="button"
+                  onClick={() => setBullets((c) => [...c, ''])}
+                  disabled={submitting}
+                  className="text-xs font-semibold text-muted transition-colors hover:text-gold disabled:opacity-50"
+                >
+                  + add a line
+                </button>
+              ) : null}
+            </div>
+          </Field>
+
+          {/* asking TC */}
+          <Field
+            label="You're asking for"
+            hint={askingTc !== null ? fmtTC(askingTc) : 'total comp, USD'}
+            error={errors.tc}
+          >
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gold">
+                $
+              </span>
+              <input
+                value={tcRaw}
+                onChange={(e) => setTcRaw(e.target.value)}
+                placeholder="450k"
+                inputMode="text"
+                autoComplete="off"
+                enterKeyHint="done"
+                disabled={submitting}
+                className="tnum w-full rounded-xl border border-line bg-surface-2 py-3 pl-8 pr-3.5 text-base font-bold text-fg outline-none placeholder:font-normal placeholder:text-muted/60 focus:border-gold disabled:opacity-50"
+              />
+            </div>
+          </Field>
+
+          <RealLarpToggle
+            value={isReal}
+            onChange={setIsReal}
+            disabled={submitting}
+            error={errors.truth}
+          />
+        </div>
+
+        {/* footer */}
+        <div
+          className="border-t border-line bg-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+        >
+          {errors.form ? (
+            <p className="mb-2 text-xs font-medium text-no" role="alert">
+              {errors.form}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting}
+            className="w-full rounded-xl bg-gold px-4 py-4 text-base font-extrabold uppercase tracking-wide text-ink transition-transform active:scale-[0.98] disabled:opacity-60"
+          >
+            {submitting ? 'Listing…' : 'List it →'}
+          </button>
+          <p className="mt-2 text-center text-[11px] text-muted">
+            Goes live for 15 minutes. The room prices you. Then the reference
+            check.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+          {label}
+        </span>
+        {hint ? <span className="tnum text-[11px] text-muted">{hint}</span> : null}
+      </div>
+      {children}
+      {error ? (
+        <p className="mt-1.5 text-xs font-medium text-no" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export default CreateSheet;

@@ -97,57 +97,78 @@ export function Sparkline({
   const toY = (bps: number) =>
     height - padY - ((bps - yMin) / (yMax - yMin)) * (height - padY * 2);
 
+  // Inset horizontally so the tip dot at the newest point isn't half-clipped
+  // by the card edge.
+  const padX = strokeWidth * 2;
+  const x0 = padX;
+  const x1 = width - padX;
+
   const pts: Pt[] =
     data.length === 1
       ? [
-          { x: 0, y: toY(data[0].bps) },
-          { x: width, y: toY(data[0].bps) },
+          { x: x0, y: toY(data[0].bps) },
+          { x: x1, y: toY(data[0].bps) },
         ]
       : data.map((p, i) => ({
-          x: (i / (data.length - 1)) * width,
+          x: x0 + (i / (data.length - 1)) * (x1 - x0),
           y: toY(p.bps),
         }));
 
   const line = smoothPath(pts);
-  const area = `${line} L ${r(width)} ${height} L 0 ${height} Z`;
+  const area = `${line} L ${r(x1)} ${height} L ${r(x0)} ${height} Z`;
   const tip = pts[pts.length - 1];
 
+  // The svg stretches to fill its container (preserveAspectRatio="none"), so
+  // anything round drawn *inside* it would come out as an oval. The tip dot is
+  // therefore positioned in CSS, in real pixels, on top.
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width="100%"
-      height={height}
-      preserveAspectRatio="none"
+    <div
+      className={`${tint} relative w-full ${className}`}
+      style={{ height }}
       aria-hidden="true"
-      className={`${tint} overflow-visible ${className}`}
     >
-      {showArea && data.length > 0 && (
-        <>
-          <defs>
-            <linearGradient id={`sparkfill-${uid}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity="0.26" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={area} fill={`url(#sparkfill-${uid})`} stroke="none" />
-        </>
-      )}
-      <path
-        d={line}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height={height}
+        preserveAspectRatio="none"
+        className="block overflow-visible"
+      >
+        {showArea && data.length > 0 && (
+          <>
+            <defs>
+              <linearGradient id={`sparkfill-${uid}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.26" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill={`url(#sparkfill-${uid})`} stroke="none" />
+          </>
+        )}
+        <path
+          d={line}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
       {showDot && tip && (
-        <>
-          <circle cx={r(tip.x)} cy={r(tip.y)} r={strokeWidth * 2.4} fill="currentColor" opacity="0.22" />
-          <circle cx={r(tip.x)} cy={r(tip.y)} r={strokeWidth * 1.1} fill="currentColor" />
-        </>
+        <span
+          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-current"
+          style={{
+            left: `${r((tip.x / width) * 100)}%`,
+            top: `${r((tip.y / height) * 100)}%`,
+            width: strokeWidth * 2.4,
+            height: strokeWidth * 2.4,
+            boxShadow: '0 0 0 3px color-mix(in srgb, currentColor 22%, transparent)',
+          }}
+        />
       )}
-    </svg>
+    </div>
   );
 }
 

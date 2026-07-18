@@ -6,6 +6,7 @@ import {
   fmtCents,
   payoutCents,
   previewBps,
+  priceForSide,
   type Side,
   type TradeAction,
 } from '@/lib/types';
@@ -38,6 +39,14 @@ export function orderBlockReason(args: {
 }): string | null {
   const { bps, side, action, shares, cash, sharesHeld } = args;
   if (!Number.isInteger(shares) || shares <= 0) {
+    // A zero order usually means the player is tapped out, not that they typed
+    // something silly — say the useful thing.
+    if (action === 'buy' && cash < priceForSide(bps, side)) {
+      return 'not enough cash';
+    }
+    if (action === 'sell' && sharesHeld <= 0) {
+      return 'you do not own that many shares';
+    }
     return 'shares must be a positive integer';
   }
   if (action === 'buy' && fillCostCents(bps, side, shares) > cash) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { MarketPublic } from '@/lib/types';
 import { RevealModal } from './RevealModal';
 
