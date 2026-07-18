@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ===========================================================================
+   OVERVALUED — booth palette. Dark, high-contrast, readable across a room.
+   Locked by the lead agent; UI lanes consume these tokens via Tailwind
+   utilities (bg-surface, text-yes, border-line, ...) and must not edit them.
+   =========================================================================== */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+@theme {
+  --color-ink: #05060a; /* page background */
+  --color-surface: #0e1119; /* cards */
+  --color-surface-2: #161b26; /* raised / hover */
+  --color-line: #232a38; /* hairline borders */
+
+  --color-fg: #f2f5fa;
+  --color-muted: #8b95ab;
+
+  --color-yes: #22e07a; /* YES / real / up */
+  --color-yes-dim: #0d3d24;
+  --color-no: #ff4d6a; /* NO / larp / down */
+  --color-no-dim: #46101d;
+
+  --color-gold: #ffc94d; /* money, leaderboard */
+  --color-hot: #a855f7; /* countdown urgency */
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-ink);
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-fg);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* booth kiosk: never rubber-band on mobile */
+  overscroll-behavior-y: none;
+}
+
+/* Tabular numerals everywhere odds and money live, so digits don't jitter
+   as they tick. This is the difference between "alive" and "twitchy". */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* --- shared motion ------------------------------------------------------- */
+
+@keyframes ov-flash-up {
+  0% { background-color: color-mix(in srgb, var(--color-yes) 32%, transparent); }
+  100% { background-color: transparent; }
+}
+@keyframes ov-flash-down {
+  0% { background-color: color-mix(in srgb, var(--color-no) 32%, transparent); }
+  100% { background-color: transparent; }
+}
+.flash-up { animation: ov-flash-up 620ms ease-out; }
+.flash-down { animation: ov-flash-down 620ms ease-out; }
+
+@keyframes ov-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-9px) rotate(-1deg); }
+  30% { transform: translateX(8px) rotate(1deg); }
+  45% { transform: translateX(-6px) rotate(-0.6deg); }
+  60% { transform: translateX(5px) rotate(0.4deg); }
+  80% { transform: translateX(-2px); }
+}
+.shake { animation: ov-shake 620ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+
+@keyframes ov-stamp {
+  0% { transform: scale(2.6) rotate(-18deg); opacity: 0; }
+  55% { transform: scale(0.92) rotate(-11deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-11deg); opacity: 1; }
+}
+.stamp { animation: ov-stamp 520ms cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+@keyframes ov-pulse-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pulse-urgent { animation: ov-pulse-urgent 1s steps(2, end) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-up, .flash-down, .shake, .stamp, .pulse-urgent {
+    animation: none !important;
+  }
 }
