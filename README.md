@@ -74,7 +74,25 @@ active market past `expires_at`, flips `is_real` face-up, pays each position
 positions, and marks the market resolved. Losers get nothing.
 
 It runs at the top of every trade, is polled by the client every 2s, and has a
-`pg_cron` job every minute as a backstop for when nobody is in the room.
+`pg_cron` job every 5s as a backstop for when nobody is in the room.
+
+### Bots
+
+Four bot traders nudge a random market every 5 seconds via `pg_cron`, so the
+odds keep moving with nobody connected. This deliberately does **not** rely on
+client polling: browsers throttle timers in background tabs to roughly once a
+minute, so a backgrounded projector tab would have frozen the board.
+
+`bot_tick()` is rate-limited internally to one nudge per 1.5s, so the extra
+client-side poll costs nothing and just acts as a fallback where `pg_cron`
+isn't available.
+
+### No AI, no API keys
+
+The 🎲 randomizer is a pure wordlist generator (`components/create/wordlists.ts`)
+— no model, no network call, no keys, no rate limits. Nothing summarizes
+résumés either; the board line-clamps bullets in CSS. The whole game runs with
+the wifi down, which is the right property for a booth.
 
 ---
 
